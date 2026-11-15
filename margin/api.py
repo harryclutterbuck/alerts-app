@@ -84,14 +84,9 @@ def page(title, body):
 
 def create_app(cfg: Config | None = None, mailer=None) -> Flask:
     cfg = cfg or Config.from_env()
-    if cfg.mailer != "console" and cfg.problems():
-        raise RuntimeError("Not ready to send real email:\n- " + "\n- ".join(cfg.problems()))
+    if cfg.mailer != "console" and cfg.secret == Config.secret:
+        raise RuntimeError("Set MARGIN_SECRET to a long random value before sending real email.")
     app = Flask(__name__)
-    if cfg.trust_proxy:
-        # Behind the host's HTTPS proxy every request arrives from the proxy; believe its one forwarded address
-        # so that rate limits apply per visitor and not to everyone at once.
-        from werkzeug.middleware.proxy_fix import ProxyFix
-        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
     app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
     mailer = mailer or make_mailer(cfg)
     app.margin_mailer = mailer
@@ -109,18 +104,10 @@ def create_app(cfg: Config | None = None, mailer=None) -> Flask:
             c.close()
 
     @app.after_request
-    def headers(r):
-        if cfg.allowed_origin:      # only needed if the page is hosted somewhere other than this app
-            r.headers["Access-Control-Allow-Origin"] = cfg.allowed_origin
-            r.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-            r.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
-        r.headers["X-Content-Type-Options"] = "nosniff"
-        r.headers["X-Frame-Options"] = "DENY"
-        r.headers["Referrer-Policy"] = "no-referrer"          # signed links must never leak in a Referer header
-        if request.path.startswith(("/manage", "/confirm", "/unsubscribe", "/f/", "/api/manage")):
-            r.headers["Cache-Control"] = "no-store"
-        if cfg.base_url.startswith("https://"):
-            r.headers["Strict-Transport-Security"] = "max-age=31536000"
+    def cors(r):
+        r.headers["Access-Control-Allow-Origin"] = cfg.allowed_origin
+        r.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        r.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
         return r
 
     @app.errorhandler(BadInput)
@@ -138,31 +125,9 @@ def create_app(cfg: Config | None = None, mailer=None) -> Flask:
     web_dir = os.path.join(os.path.dirname(__file__), "web")
     outbox = os.path.abspath(cfg.outbox_dir)
 
-    def render_page(name, extra=None):
-        """Serve a page from web/, filling in the product name so a rename is one setting (MARGIN_BRAND)."""
-        text = open(os.path.join(web_dir, name), encoding="utf-8").read()
-        js_safe = json.dumps(cfg.brand)[1:-1].replace("'", "\\'").replace("<", "\\u003c")
-        values = {"{{BRAND}}": H.escape(cfg.brand), "{{BRAND_JS}}": js_safe, **(extra or {})}
-        for k, v in values.items():
-            text = text.replace(k, v)
-        return Response(text, mimetype="text/html")
-
     @app.get("/")
     def home():
-        return render_page("index.html")
-
-    @app.get("/manage")
-    def manage_page():
-        return render_page("manage.html")
-
-    @app.get("/privacy")
-    def privacy():
-        return render_page("privacy.html", {"{{OPERATOR}}": H.escape(cfg.operator or "[your name or organisation]"),
-                     "{{CONTACT}}": H.escape(cfg.contact_email),
-                     "{{RETENTION}}": str(cfg.paper_retention_days),
-                     "{{UNFILLED}}": "" if cfg.operator else
-                         "<p style='background:#FFF6DD;border:1px solid #E8C766;padding:12px;border-radius:8px'><b>Not ready to publish:</b> "
-                         "set MARGIN_OPERATOR and MARGIN_CONTACT_EMAIL, and review every section against what you actually do.</p>"})
+        return send_from_directory(web_dir, "index.html")
 
     if cfg.mailer == "console":
         # Development only: lets you read the emails the app would have sent.
@@ -215,13 +180,12 @@ def create_app(cfg: Config | None = None, mailer=None) -> Flask:
              int(a["oa_only"]), int(a["preprints"]), a["frequency"], db.now_iso()))
         c.commit()
         url = f"{cfg.base_url}/confirm/{link(cfg, 'confirm', s=sub['id'], a=cur.lastrowid)}"
-        text = (f"Confirm your {cfg.brand} alert for “{a['name']}” ({a['frequency']}):\n{url}\n\n"
+        text = (f"Confirm your Margin alert for “{a['name']}” ({a['frequency']}):\n{url}\n\n"
                 "If you didn't ask for this, ignore this email and nothing will happen.")
         body = (f"<p style='font:16px system-ui'>Confirm your alert for <b>“{H.escape(a['name'])}”</b> "
                 f"({a['frequency']}).</p><p><a href='{url}' style='font:600 16px system-ui'>Confirm my alert</a></p>"
-                "<p style='color:#5B6577;font:13px system-ui'>If you didn’t ask for this, ignore this email and nothing will happen."
-                + (f" {H.escape(cfg.brand)} is run by {H.escape(cfg.operator)}." if cfg.operator else "") + "</p>")
-        mailer.send(email, f"Confirm your {cfg.brand} alert", body, text)
+                "<p style='color:#5B6577;font:13px system-ui'>If you didn’t ask for this, ignore this email and nothing will happen.</p>")
+        mailer.send(email, "Confirm your Margin alert", body, text)
         # Same response whether or not the address already existed, so nobody can probe who is subscribed.
         return jsonify(status="check_your_inbox"), 202
 
@@ -236,9 +200,7 @@ def create_app(cfg: Config | None = None, mailer=None) -> Flask:
         c.execute("UPDATE alerts SET status='active', activated_at=COALESCE(activated_at,?) WHERE id=? AND subscriber_id=?",
                   (db.now_iso(), p["a"], p["s"]))
         c.commit()
-        manage = f"{cfg.frontend_url}/manage?t={link(cfg, 'manage', s=p['s'])}"
-        return page("You’re subscribed", "<p>Your alert is active. New matching papers will arrive in your next digest.</p>"
-                    f"<p><a href='{manage}'>Manage your alerts</a></p>")
+        return page("You’re subscribed", "<p>Your alert is active. New matching papers will arrive in your next digest.</p>")
 
     @app.route("/unsubscribe/<token>", methods=["GET", "POST"])
     def unsubscribe(token):
@@ -255,22 +217,12 @@ def create_app(cfg: Config | None = None, mailer=None) -> Flask:
     @app.get("/f/<token>")
     def feedback(token):
         p = tokens.verify(token, cfg.secret, "fb")
-        if not p or p.get("v") not in ("up", "down"):
+        if not p:
             return page("This link has expired", ""), 400
-        c = conn()
-        alert = c.execute("SELECT * FROM alerts WHERE id=?", (p["a"],)).fetchone()
-        if not alert:
-            return page("This alert no longer exists", "<p>Nothing was recorded.</p>"), 404
-        # One vote per paper per alert: a later click replaces an earlier one.
-        c.execute("DELETE FROM feedback WHERE alert_id=? AND paper_id=?", (p["a"], p["p"]))
-        c.execute("INSERT INTO feedback(alert_id,paper_id,value,created_at) VALUES(?,?,?,?)",
-                  (p["a"], p["p"], p["v"], db.now_iso()))
-        c.commit()
-        manage = f"{cfg.frontend_url}/manage?t={link(cfg, 'manage', s=alert['subscriber_id'])}"
-        if p["v"] == "up":
-            return page("Thanks", "<p>We’ll rank papers like this one higher in your next digests.</p>")
-        return page("Thanks", "<p>We’ll rank papers like this one lower in your next digests.</p>"
-                              f"<p>Want to block a topic completely? <a href='{manage}'>Add a “leave out” term</a>.</p>")
+        conn().execute("INSERT INTO feedback(alert_id,paper_id,value,created_at) VALUES(?,?,?,?)",
+                       (p["a"], p["p"], p["v"], db.now_iso()))
+        conn().commit()
+        return page("Thanks", "<p>We’ll use this to improve your results.</p>")
 
     def manage_sub():
         auth = request.headers.get("Authorization", "")
@@ -290,28 +242,7 @@ def create_app(cfg: Config | None = None, mailer=None) -> Flask:
         if not sub:
             return jsonify(error="Invalid or expired link"), 401
         rows = conn().execute("SELECT * FROM alerts WHERE subscriber_id=? ORDER BY id", (sub["id"],)).fetchall()
-        return jsonify(email=sub["email"], unsubscribed=bool(sub["unsubscribed_at"]), alerts=[alert_json(r) for r in rows])
-
-    @app.post("/api/manage/unsubscribe")
-    def manage_unsubscribe():
-        sub = manage_sub()
-        if not sub:
-            return jsonify(error="Invalid or expired link"), 401
-        conn().execute("UPDATE subscribers SET unsubscribed_at=? WHERE id=?", (db.now_iso(), sub["id"]))
-        conn().commit()
-        return jsonify(ok=True)
-
-    @app.delete("/api/manage")
-    def manage_delete_account():
-        """Right to erasure: removes the subscriber, every alert, every queued match and their feedback."""
-        sub = manage_sub()
-        if not sub:
-            return jsonify(error="Invalid or expired link"), 401
-        c = conn()
-        c.execute("DELETE FROM feedback WHERE alert_id IN (SELECT id FROM alerts WHERE subscriber_id=?)", (sub["id"],))
-        c.execute("DELETE FROM subscribers WHERE id=?", (sub["id"],))   # cascades to alerts and matches
-        c.commit()
-        return ("", 204)
+        return jsonify(email=sub["email"], alerts=[alert_json(r) for r in rows])
 
     @app.route("/api/manage/alerts/<int:aid>", methods=["PATCH", "DELETE"])
     def manage_alert(aid):
@@ -332,18 +263,12 @@ def create_app(cfg: Config | None = None, mailer=None) -> Flask:
             if d["status"] not in ("active", "paused") or row["status"] == "pending":
                 raise BadInput("Status can only switch between active and paused.")
             upd["status"] = d["status"]
-        changed_query = any(k in upd for k in ("include", "exclude", "sources", "oa_only", "preprints"))
-        if "include" in upd and "name" not in upd and upd["include"] != json.loads(row["include"]):
-            upd["name"] = ", ".join(upd["include"])[:80]   # keep a custom name unless the topics themselves changed
         for k in ("include", "exclude", "sources"):
             if k in upd:
                 upd[k] = json.dumps(upd[k])
         for k in ("oa_only", "preprints"):
             if k in upd:
                 upd[k] = int(upd[k])
-        if changed_query:
-            # Papers queued under the old settings must not go out under the new ones.
-            c.execute("DELETE FROM matches WHERE alert_id=? AND sent_at IS NULL", (aid,))
         if upd:
             c.execute(f"UPDATE alerts SET {','.join(k + '=?' for k in upd)} WHERE id=?", (*upd.values(), aid))
             c.commit()
