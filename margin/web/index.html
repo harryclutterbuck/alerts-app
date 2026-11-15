@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{BRAND}} – research alerts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Newsreader:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#EDF1F7;--panel:#FFFFFF;--ink:#101828;--mute:#5B6577;--line:#D9DFEA;--accent:#3A39E8;--accent-ink:#FFFFFF;
+  --hl:#FFE98A;--hl-ink:#101828;--soft:#E7E8FD;--ok:#0F7B53;--bad:#B42318;--warn-bg:#FFF6DD;--warn-ink:#5C3D00;--warn-line:#E8C766;
+  --sans:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;--serif:"Newsreader",Georgia,"Times New Roman",serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0C1220;--panel:#141C2E;--ink:#E9EDF6;--mute:#9AA5BA;--line:#27324A;--accent:#8B8BFF;--accent-ink:#0C1220;
+  --hl:#6B5A10;--hl-ink:#FFF3C2;--soft:#222B52;--ok:#4CC999;--bad:#FF8A7A;--warn-bg:#3A2E0B;--warn-ink:#FFE3A0;--warn-line:#7A6320;}}
+:root[data-theme="dark"]{
+  --bg:#0C1220;--panel:#141C2E;--ink:#E9EDF6;--mute:#9AA5BA;--line:#27324A;--accent:#8B8BFF;--accent-ink:#0C1220;
+  --hl:#6B5A10;--hl-ink:#FFF3C2;--soft:#222B52;--ok:#4CC999;--bad:#FF8A7A;--warn-bg:#3A2E0B;--warn-ink:#FFE3A0;--warn-line:#7A6320;}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 56px}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:34px}
+.logo{font:600 22px var(--serif);letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
+.logo i{width:22px;height:22px;border:2px solid var(--accent);border-right-width:7px;border-radius:3px;display:block}
+.hint{color:var(--mute);font-size:13px}
+h1{font:400 clamp(30px,4.4vw,46px)/1.08 var(--serif);letter-spacing:-.02em;margin:0 0 12px;max-width:15em}
+.lede{color:var(--mute);margin:0 0 28px;max-width:34em;font-size:16px}
+.grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:28px;align-items:start}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px}
+.field{margin-bottom:22px}
+.field>label,.field>.lab{display:block;font-weight:600;margin-bottom:3px}
+.sub{color:var(--mute);font-size:13px;margin:0 0 9px}
+.box{display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);cursor:text}
+.box:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+.box input{flex:1;min-width:130px;border:0;background:transparent;font:inherit;color:var(--ink);padding:5px 4px;outline:none}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--soft);color:var(--ink);border-radius:7px;padding:4px 6px 4px 10px;font-weight:500;font-size:14px}
+.chip.x{background:transparent;border:1px solid var(--bad);color:var(--bad);text-decoration:line-through}
+.chip button{all:unset;cursor:pointer;width:18px;height:18px;line-height:18px;text-align:center;border-radius:5px;color:var(--mute)}
+.chip button:hover{background:var(--line)}
+.chip button:focus-visible,.seg button:focus-visible,.try button:focus-visible,.btn:focus-visible,.tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.try{margin-top:8px;font-size:13px;color:var(--mute)}
+.try button{all:unset;cursor:pointer;color:var(--accent);margin-right:10px;font-weight:500}
+.try button:hover{text-decoration:underline}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}
+.opts label{display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer}
+.opts input,.sw input{accent-color:var(--accent);width:16px;height:16px;margin:0}
+.seg{display:inline-flex;border:1.5px solid var(--line);border-radius:10px;padding:3px;background:var(--bg)}
+.seg button{all:unset;cursor:pointer;padding:6px 16px;border-radius:7px;font-weight:500;font-size:14px;color:var(--mute)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.email{display:flex;gap:8px;flex-wrap:wrap}
+.email input{flex:1;min-width:180px;font:inherit;color:var(--ink);background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:11px 12px;outline:none}
+.email input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+.btn{all:unset;cursor:pointer;background:var(--accent);color:var(--accent-ink);font-weight:600;padding:11px 20px;border-radius:10px;text-align:center}
+.btn:hover{filter:brightness(1.08)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.err{color:var(--bad);font-size:13px;min-height:18px;margin-top:6px}
+.fine{color:var(--mute);font-size:12.5px;margin:10px 0 0}
+.done{text-align:center;padding:26px 6px}
+.done h2{font:400 28px var(--serif);margin:10px 0 8px}
+.done p{color:var(--mute);margin:0 auto 16px;max-width:28em}
+.tick{width:46px;height:46px;border-radius:50%;background:var(--ok);color:var(--panel);display:grid;place-items:center;margin:0 auto;font-size:22px}
+.link{all:unset;cursor:pointer;color:var(--accent);font-weight:500}
+.link:hover{text-decoration:underline}
+.pane{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px)}
+@media(max-width:900px){.pane{position:static}}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.tabs{display:inline-flex;gap:4px}
+.tab{all:unset;cursor:pointer;padding:6px 12px;border-radius:8px;font-weight:600;font-size:14px;color:var(--mute)}
+.tab[aria-selected="true"]{background:var(--soft);color:var(--ink)}
+.count{color:var(--mute);font-size:13px}
+.list{max-height:640px;overflow:auto;margin:0 -6px;padding:0 6px}
+.paper{padding:15px 0;border-top:1px solid var(--line)}
+.paper:first-child{border-top:0;padding-top:4px}
+.meta{font-size:12.5px;color:var(--mute);display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px}
+.tag{border-radius:5px;padding:1px 7px;font-weight:600;font-size:11.5px;background:var(--soft);color:var(--ink)}
+.tag.oa{background:transparent;border:1px solid var(--ok);color:var(--ok)}
+.paper h3{font:600 18px/1.3 var(--serif);margin:0 0 4px}
+.au{font-size:13px;color:var(--mute);margin-bottom:5px}
+.ab{font-size:14px;margin:0}
+mark{background:var(--hl);color:var(--hl-ink);border-radius:3px;padding:0 2px}
+.empty{padding:38px 12px;text-align:center;color:var(--mute)}
+.empty b{display:block;color:var(--ink);font:400 22px var(--serif);margin-bottom:6px}
+.mail{background:var(--bg);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.mh{padding:12px 16px;border-bottom:1px solid var(--line);font-size:13px;color:var(--mute)}
+.mh b{display:block;color:var(--ink);font-size:15px;font-weight:600}
+.mb{padding:18px 18px 8px}
+.mb .intro{font:italic 400 16px var(--serif);margin:0 0 6px}
+.mi{padding:12px 0;border-top:1px solid var(--line)}
+.mi:first-of-type{border-top:0}
+.mi a{font:600 16px/1.3 var(--serif);color:var(--accent);text-decoration:none}
+.mi .ab{font-size:13.5px;margin-top:3px}
+.fb{font-size:12.5px;color:var(--mute);margin-top:5px}
+.mf{padding:12px 18px;border-top:1px solid var(--line);font-size:12px;color:var(--mute)}
+.note{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--warn-bg);color:var(--warn-ink);border:1px solid var(--warn-line);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:14px}
+.note button{all:unset;cursor:pointer;font-weight:600;color:var(--warn-ink);border:1.5px solid currentColor;border-radius:8px;padding:4px 11px;font-size:13px;white-space:nowrap}
+.note button:hover{background:var(--warn-line)}
+.note button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sum{background:var(--soft);border-radius:10px;padding:11px 13px;margin-bottom:16px;font-size:14px}
+.sum.bad{background:var(--warn-bg);color:var(--warn-ink);border:1px solid var(--warn-line)}
+@media(prefers-reduced-motion:no-preference){.paper{animation:in .25s ease}@keyframes in{from{opacity:.3}to{opacity:1}}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo"><i></i>{{BRAND}}</div>
+    <span class="hint" id="status"></span>
+  </header>
+
+  <h1>New research on your topic, in your inbox.</h1>
+  <p class="lede">Choose your keywords and watch matching papers appear as you type. Subscribe when the results look right.</p>
+
+  <div class="grid">
+    <section class="card" id="form-card" aria-label="Create an alert">
+      <div id="form">
+        <div class="field">
+          <label for="inc">Topics to follow</label>
+          <p class="sub">Press Enter after each. Use quotes for an exact phrase.</p>
+          <div class="box" id="incbox" data-for="inc"><input id="inc" placeholder="e.g. CRISPR base editing" autocomplete="off"></div>
+          <div class="try">Try: <button data-add="machine learning">machine learning</button><button data-add="biofeedback">biofeedback</button><button data-add="“gene therapy”">“gene therapy”</button></div>
+        </div>
+        <div class="field">
+          <label for="exc">Leave out</label>
+          <p class="sub">Papers containing these terms are skipped.</p>
+          <div class="box" id="excbox" data-for="exc"><input id="exc" placeholder="e.g. review" autocomplete="off"></div>
+        </div>
+        <div class="field">
+          <span class="lab">Where to look</span>
+          <p class="sub">Sources searched for new papers.</p>
+          <div class="opts" id="src">
+            <label><input type="checkbox" value="OpenAlex" checked>OpenAlex</label>
+            <label><input type="checkbox" value="PubMed" checked>PubMed</label>
+            <label><input type="checkbox" value="arXiv" checked>arXiv</label>
+            <label><input type="checkbox" value="bioRxiv" checked>bioRxiv</label>
+          </div>
+          <div class="opts" style="margin-top:12px">
+            <label><input type="checkbox" id="oa">Open access only</label>
+            <label><input type="checkbox" id="pre" checked>Include preprints</label>
+          </div>
+        </div>
+        <div class="field">
+          <span class="lab">How often</span>
+          <p class="sub" style="margin-bottom:9px">Instant sends an email as soon as a paper matches.</p>
+          <div class="seg" id="freq" role="group" aria-label="Frequency">
+            <button aria-pressed="false">Instant</button><button aria-pressed="false">Daily</button><button aria-pressed="true">Weekly</button>
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <div class="sum" id="sum" hidden></div>
+          <label for="mail">Your email</label>
+          <div class="email" style="margin-top:6px">
+            <input id="mail" type="email" placeholder="you@university.ac.uk" autocomplete="email">
+            <button class="btn" id="go">Create alert</button>
+          </div>
+          <div class="err" id="err" role="alert"></div>
+          <p class="fine">We’ll send one email to confirm. Every digest has a one-click unsubscribe and a link to edit this alert, with no password needed. By creating an alert you agree to our <a href="/privacy" style="color:var(--accent)">privacy notice</a>.</p>
+        </div>
+      </div>
+      <div class="done" id="done" hidden>
+        <div class="tick">✓</div>
+        <h2>Check your inbox</h2>
+        <p id="donemsg"></p><p id="devhint" class="fine" hidden></p>
+        <button class="link" id="again">Create another alert</button>
+      </div>
+    </section>
+
+    <section class="card pane" aria-label="Live preview" aria-live="polite">
+      <div class="ph">
+        <div class="tabs" role="tablist">
+          <button class="tab" role="tab" aria-selected="true" data-view="list">Matching papers</button>
+          <button class="tab" role="tab" aria-selected="false" data-view="mail">Email preview</button>
+        </div>
+        <span class="count" id="count"></span>
+      </div>
+      <div id="notice"></div>
+      <div id="out"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+// When served by the backend this is "" (same origin). When the file is opened directly, talk to the local server.
+const API=location.protocol==="file:"?"http://127.0.0.1:5000":"";
+const SRC={openalex:"OpenAlex",pubmed:"PubMed",arxiv:"arXiv",biorxiv:"bioRxiv"};
+const S={inc:[],exc:[],freq:"Weekly",view:"list"};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const clean=t=>t.replace(/[“”"]/g,"").trim().toLowerCase();
+const rx=t=>t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+const ago=d=>{const n=Math.round((new Date(new Date().toDateString())-new Date(d+"T00:00:00"))/864e5);return n<=0?"Today":n===1?"Yesterday":n+" days ago"};
+const snip=(t,n=320)=>{t=(t||"").replace(/\s+/g," ").trim();return t.length<=n?t:t.slice(0,n).replace(/\s+\S*$/,"")+"…"};
+
+const FULL=["openalex","pubmed","arxiv","biorxiv"];
+const n=d=>d.count.toLocaleString()+(d.capped?"+":"");
+const list=(a,w)=>a.length<2?a.join(""):a.slice(0,-1).join(", ")+" "+w+" "+a[a.length-1];
+const q=t=>"“"+t.replace(/[“”"]/g,"").trim()+"”";
+let data=null,seq=0,timer=0;
+const raw=k=>{const v=[...S[k]],live=$(k).value.trim();if(live&&!v.some(x=>clean(x)===clean(live)))v.push(live);return v};
+const sources=()=>[...document.querySelectorAll("#src input:checked")].map(i=>i.value.toLowerCase());
+
+function chips(kind){
+  const box=$(kind+"box"),inp=$(kind);
+  box.querySelectorAll(".chip").forEach(c=>c.remove());
+  S[kind].forEach((t,i)=>{
+    const c=document.createElement("span");c.className="chip"+(kind==="exc"?" x":"");
+    c.innerHTML=esc(t)+'<button aria-label="Remove '+esc(t)+'">×</button>';
+    c.querySelector("button").onclick=e=>{e.stopPropagation();S[kind].splice(i,1);chips(kind);refresh()};
+    box.insertBefore(c,inp);
+  });
+}
+function add(kind,v){
+  v=v.trim().replace(/,$/,"");
+  if(!v||S[kind].some(x=>clean(x)===clean(v)))return;
+  S[kind].push(v);chips(kind);refresh();
+}
+["inc","exc"].forEach(k=>{
+  const inp=$(k);
+  inp.addEventListener("keydown",e=>{
+    if(e.key==="Enter"||e.key===","){e.preventDefault();add(k,inp.value);inp.value=""}
+    else if(e.key==="Backspace"&&!inp.value&&S[k].length){S[k].pop();chips(k);refresh()}
+  });
+  inp.addEventListener("blur",()=>{if(inp.value.trim()){add(k,inp.value);inp.value=""}});
+  inp.addEventListener("input",refresh);
+  $(k+"box").onclick=()=>inp.focus();
+});
+document.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>add("inc",b.dataset.add));
+document.querySelectorAll("#freq button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("#freq button").forEach(x=>x.setAttribute("aria-pressed",x===b));
+  S.freq=b.textContent;render();
+});
+document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
+  S.view=t.dataset.view;
+  document.querySelectorAll(".tab").forEach(x=>x.setAttribute("aria-selected",x===t));render();
+});
+document.querySelectorAll("#src input,#oa,#pre").forEach(i=>i.onchange=refresh);
+
+// Ask the server for matches, a moment after the person stops typing.
+function refresh(){clearTimeout(timer);timer=setTimeout(fetchPreview,250);if(!raw("inc").length){data=null;render()}else meta()}
+const filtered=()=>sources().length<FULL.length||$("oa").checked||!$("pre").checked;
+async function post(body){
+  const r=await fetch(API+"/api/preview",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  return{ok:r.ok,j:await r.json()};
+}
+async function fetchPreview(){
+  const include=raw("inc"),my=++seq;
+  if(!include.length){data=null;return render()}
+  const src=sources();
+  if(!src.length){data={count:0,papers:[],nosrc:true};return render()}
+  const exclude=raw("exc");
+  try{
+    // When any filter is on, also ask what the same topics return without filters, so we can say what they hide.
+    const [a,b]=await Promise.all([
+      post({include,exclude,sources:src,oa_only:$("oa").checked,preprints:$("pre").checked}),
+      filtered()?post({include,exclude,sources:FULL,oa_only:false,preprints:true}):null]);
+    if(my!==seq)return;               // a newer request has already been sent
+    data=a.ok?a.j:{error:a.j.error||"Something went wrong."};
+    if(a.ok&&b&&b.ok)data.relaxed=b.j.count;
+  }catch(e){if(my!==seq)return;data={offline:true}}
+  render();
+}
+
+// Filters that can never match anything (arXiv and bioRxiv only hold preprints).
+function conflict(){
+  const s=sources();
+  if(!$("pre").checked&&s.length&&s.every(x=>x==="arxiv"||x==="biorxiv"))
+    return "Preprints are switched off, but "+list(s.map(x=>SRC[x]),"and")+(s.length>1?" contain":" contains")+" only preprints, so this alert could never match anything.";
+  return null;
+}
+function renderNotice(){
+  const n=$("notice"),c=conflict();let h="";
+  if(c)h='<div class="note"><span>'+esc(c)+'</span><button data-fix="pre">Include preprints</button></div>';
+  else if(data&&!data.error&&!data.offline&&!data.nosrc&&data.relaxed>data.count){
+    const hid=data.relaxed-data.count;
+    h='<div class="note"><span>'+(data.count
+      ?"Your filters are hiding "+hid.toLocaleString()+" more "+(hid===1?"paper":"papers")+" that match these topics."
+      :"Nothing matches with these filters, but "+data.relaxed.toLocaleString()+(data.relaxed===1?" paper matches":" papers match")+" without them.")
+      +'</span><button data-fix="clear">Clear filters</button></div>';
+  }
+  n.innerHTML=h;
+  n.querySelectorAll("[data-fix]").forEach(b=>b.onclick=()=>{
+    if(b.dataset.fix==="pre")$("pre").checked=true;
+    else{document.querySelectorAll("#src input").forEach(i=>i.checked=true);$("oa").checked=false;$("pre").checked=true}
+    refresh();
+  });
+}
+function renderSummary(){
+  const el=$("sum"),inc=raw("inc");
+  if(!inc.length){el.hidden=true;return}
+  const exc=raw("exc"),s=sources(),c=conflict(),f=S.freq;
+  let t=(f==="Instant"?"You’ll get an email as soon as a new paper about ":"You’ll get a "+f.toLowerCase()+" email with new papers about ")
+    +list(inc.map(q),"or")+(f==="Instant"?" is published":"");
+  if(exc.length)t+=", leaving out "+list(exc.map(q),"and");
+  t+=s.length===FULL.length?" from all sources":" from "+list(s.map(x=>SRC[x]),"and");
+  if($("oa").checked)t+=", open access only";
+  if(!$("pre").checked)t+=", excluding preprints";
+  t+=".";
+  if(data&&!data.error&&!data.offline&&!data.nosrc&&typeof data.count==="number"&&!c)
+    t+=" "+n(data)+(data.count===1?" paper":" papers")+" matched in the last 30 days.";
+  const bad=!s.length||c;
+  el.className="sum"+(bad?" bad":"");
+  el.textContent=!s.length?"⚠ No sources are selected, so this alert wouldn’t find anything.":c?"⚠ "+c:t;
+  el.hidden=false;
+}
+function meta(){renderNotice();renderSummary()}
+
+function hl(text,words){
+  let o=esc(text);
+  words.forEach(t=>{if(t)o=o.replace(new RegExp("("+rx(esc(t))+")","gi"),"<mark>$1</mark>")});
+  return o;
+}
+function render(){
+  meta();
+  const out=$("out"),cnt=$("count");
+  const words=[...new Set(raw("inc").flatMap(t=>clean(t).split(/\s+/)).filter(w=>w.length>2))];
+  if(!data){cnt.textContent="";out.innerHTML='<div class="empty"><b>Your matches will appear here</b>Add a topic on the left, or tap one of the examples.</div>';return}
+  if(data.offline){cnt.textContent="";out.innerHTML='<div class="empty"><b>Can’t reach the server</b>Start it with <code>python3 -m margin serve</code> and reload this page.</div>';return}
+  if(data.error){cnt.textContent="";out.innerHTML='<div class="empty"><b>Something went wrong</b>'+esc(data.error)+'</div>';return}
+  if(data.nosrc){cnt.textContent="";out.innerHTML='<div class="empty"><b>No sources selected</b>Tick at least one source on the left.</div>';return}
+  const list=data.papers;
+  cnt.textContent=n(data)+(data.count===1?" paper":" papers")+" in the last 30 days";
+  if(!list.length){out.innerHTML='<div class="empty"><b>Nothing matched yet</b>Try a broader keyword, remove a “leave out” term, or turn on more sources.</div>';return}
+  const au=p=>p.authors.slice(0,4).join(", ")+(p.authors.length>4?" et al.":"");
+  if(S.view==="list"){
+    out.innerHTML='<div class="list">'+list.map(p=>
+      '<article class="paper"><div class="meta"><span class="tag">'+esc(SRC[p.source]||p.source)+'</span>'+(p.is_oa?'<span class="tag oa">Open access</span>':'')+(p.is_preprint?'<span class="tag">Preprint</span>':'')+'<span>'+esc(p.venue)+' · '+esc(ago(p.published))+'</span></div>'+
+      '<h3><a href="'+esc(p.url)+'" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">'+hl(p.title,words)+'</a></h3><div class="au">'+esc(au(p))+'</div><p class="ab">'+hl(snip(p.abstract),words)+'</p></article>').join("")+'</div>';
+  }else{
+    const n=Math.min(list.length,4),first=raw("inc")[0];
+    const when=S.freq==="Instant"?"New paper":S.freq==="Daily"?"Your daily digest":"Your weekly digest";
+    out.innerHTML='<div class="mail"><div class="mh">From {{BRAND_JS}}<b>'+when+': '+data.count+' new '+(data.count===1?"paper":"papers")+' for “'+esc(first)+'”</b></div><div class="mb"><p class="intro">Here’s what’s new for your alert.</p>'+
+      list.slice(0,n).map(p=>'<div class="mi"><a href="#" onclick="return false">'+esc(p.title)+'</a><div class="au" style="margin:2px 0 0">'+esc(au(p))+' · '+esc(p.venue)+(p.is_oa?' · Open access':'')+'</div><p class="ab">'+hl(snip(p.abstract,220),words)+'</p><div class="fb">More like this · Not relevant</div></div>').join("")+
+      (data.count>n?'<div class="mi"><span class="au">+ '+(data.count-n)+' more in your full digest</span></div>':'')+
+      '</div><div class="mf">Edit this alert · Pause · Unsubscribe in one click</div></div>';
+  }
+}
+
+$("go").onclick=async()=>{
+  const m=$("mail").value.trim(),err=$("err"),inc=raw("inc"),btn=$("go");
+  if(!inc.length){err.textContent="Add at least one topic to follow.";return}
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(m)){err.textContent="Enter a valid email address, like you@university.ac.uk.";return}
+  if(!sources().length){err.textContent="Tick at least one source.";return}
+  const cf=conflict();if(cf){err.textContent=cf;return}
+  err.textContent="";btn.disabled=true;btn.textContent="Sending…";
+  try{
+    const r=await fetch(API+"/api/subscribe",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({email:m,alert:{include:inc,exclude:raw("exc"),sources:sources(),oa_only:$("oa").checked,
+        preprints:$("pre").checked,frequency:S.freq.toLowerCase()}})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok){err.textContent=j.error||"Something went wrong. Please try again.";return}
+    $("donemsg").textContent="We’ve sent a confirmation link to "+m+". Click it to start your "+S.freq.toLowerCase()+" alert for “"+inc.join("”, “")+"”.";
+    const dh=$("devhint");
+    if(/^(localhost|127\.0\.0\.1)$/.test(new URL(API||location.href,location.href).hostname)){
+      dh.innerHTML='Testing locally? Your email was saved, not sent. <a href="'+API+'/dev/outbox" target="_blank" rel="noopener">Open the dev outbox</a> to find it.';dh.hidden=false}
+    $("form").hidden=true;$("done").hidden=false;
+  }catch(e){err.textContent="Can’t reach the server. Start it with python3 -m margin serve."}
+  finally{btn.disabled=false;btn.textContent="Create alert"}
+};
+$("again").onclick=()=>{$("done").hidden=true;$("form").hidden=false};
+fetch(API+"/api/health").then(r=>r.json()).then(j=>{$("status").textContent="Live · "+j.papers.toLocaleString()+" papers indexed"}).catch(()=>{$("status").textContent="Server not running"});
+render();
+</script>
+</body>
+</html>

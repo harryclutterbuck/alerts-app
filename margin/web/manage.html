@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Manage your alerts – {{BRAND}}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Newsreader:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#EDF1F7;--panel:#FFFFFF;--ink:#101828;--mute:#5B6577;--line:#D9DFEA;--accent:#3A39E8;--accent-ink:#FFFFFF;
+  --hl:#FFE98A;--hl-ink:#101828;--soft:#E7E8FD;--ok:#0F7B53;--bad:#B42318;--warn-bg:#FFF6DD;--warn-ink:#5C3D00;--warn-line:#E8C766;
+  --sans:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;--serif:"Newsreader",Georgia,"Times New Roman",serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0C1220;--panel:#141C2E;--ink:#E9EDF6;--mute:#9AA5BA;--line:#27324A;--accent:#8B8BFF;--accent-ink:#0C1220;
+  --hl:#6B5A10;--hl-ink:#FFF3C2;--soft:#222B52;--ok:#4CC999;--bad:#FF8A7A;--warn-bg:#3A2E0B;--warn-ink:#FFE3A0;--warn-line:#7A6320;}}
+:root[data-theme="dark"]{
+  --bg:#0C1220;--panel:#141C2E;--ink:#E9EDF6;--mute:#9AA5BA;--line:#27324A;--accent:#8B8BFF;--accent-ink:#0C1220;
+  --hl:#6B5A10;--hl-ink:#FFF3C2;--soft:#222B52;--ok:#4CC999;--bad:#FF8A7A;--warn-bg:#3A2E0B;--warn-ink:#FFE3A0;--warn-line:#7A6320;}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 56px}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:34px}
+.logo{font:600 22px var(--serif);letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
+.logo i{width:22px;height:22px;border:2px solid var(--accent);border-right-width:7px;border-radius:3px;display:block}
+.hint{color:var(--mute);font-size:13px}
+h1{font:400 clamp(30px,4.4vw,46px)/1.08 var(--serif);letter-spacing:-.02em;margin:0 0 12px;max-width:15em}
+.lede{color:var(--mute);margin:0 0 28px;max-width:34em;font-size:16px}
+.grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:28px;align-items:start}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px}
+.field{margin-bottom:22px}
+.field>label,.field>.lab{display:block;font-weight:600;margin-bottom:3px}
+.sub{color:var(--mute);font-size:13px;margin:0 0 9px}
+.box{display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);cursor:text}
+.box:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+.box input{flex:1;min-width:130px;border:0;background:transparent;font:inherit;color:var(--ink);padding:5px 4px;outline:none}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--soft);color:var(--ink);border-radius:7px;padding:4px 6px 4px 10px;font-weight:500;font-size:14px}
+.chip.x{background:transparent;border:1px solid var(--bad);color:var(--bad);text-decoration:line-through}
+.chip button{all:unset;cursor:pointer;width:18px;height:18px;line-height:18px;text-align:center;border-radius:5px;color:var(--mute)}
+.chip button:hover{background:var(--line)}
+.chip button:focus-visible,.seg button:focus-visible,.try button:focus-visible,.btn:focus-visible,.tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.try{margin-top:8px;font-size:13px;color:var(--mute)}
+.try button{all:unset;cursor:pointer;color:var(--accent);margin-right:10px;font-weight:500}
+.try button:hover{text-decoration:underline}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}
+.opts label{display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer}
+.opts input,.sw input{accent-color:var(--accent);width:16px;height:16px;margin:0}
+.seg{display:inline-flex;border:1.5px solid var(--line);border-radius:10px;padding:3px;background:var(--bg)}
+.seg button{all:unset;cursor:pointer;padding:6px 16px;border-radius:7px;font-weight:500;font-size:14px;color:var(--mute)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.email{display:flex;gap:8px;flex-wrap:wrap}
+.email input{flex:1;min-width:180px;font:inherit;color:var(--ink);background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:11px 12px;outline:none}
+.email input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+.btn{all:unset;cursor:pointer;background:var(--accent);color:var(--accent-ink);font-weight:600;padding:11px 20px;border-radius:10px;text-align:center}
+.btn:hover{filter:brightness(1.08)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.err{color:var(--bad);font-size:13px;min-height:18px;margin-top:6px}
+.fine{color:var(--mute);font-size:12.5px;margin:10px 0 0}
+.done{text-align:center;padding:26px 6px}
+.done h2{font:400 28px var(--serif);margin:10px 0 8px}
+.done p{color:var(--mute);margin:0 auto 16px;max-width:28em}
+.tick{width:46px;height:46px;border-radius:50%;background:var(--ok);color:var(--panel);display:grid;place-items:center;margin:0 auto;font-size:22px}
+.link{all:unset;cursor:pointer;color:var(--accent);font-weight:500}
+.link:hover{text-decoration:underline}
+.pane{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px)}
+@media(max-width:900px){.pane{position:static}}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.tabs{display:inline-flex;gap:4px}
+.tab{all:unset;cursor:pointer;padding:6px 12px;border-radius:8px;font-weight:600;font-size:14px;color:var(--mute)}
+.tab[aria-selected="true"]{background:var(--soft);color:var(--ink)}
+.count{color:var(--mute);font-size:13px}
+.list{max-height:640px;overflow:auto;margin:0 -6px;padding:0 6px}
+.paper{padding:15px 0;border-top:1px solid var(--line)}
+.paper:first-child{border-top:0;padding-top:4px}
+.meta{font-size:12.5px;color:var(--mute);display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px}
+.tag{border-radius:5px;padding:1px 7px;font-weight:600;font-size:11.5px;background:var(--soft);color:var(--ink)}
+.tag.oa{background:transparent;border:1px solid var(--ok);color:var(--ok)}
+.paper h3{font:600 18px/1.3 var(--serif);margin:0 0 4px}
+.au{font-size:13px;color:var(--mute);margin-bottom:5px}
+.ab{font-size:14px;margin:0}
+mark{background:var(--hl);color:var(--hl-ink);border-radius:3px;padding:0 2px}
+.empty{padding:38px 12px;text-align:center;color:var(--mute)}
+.empty b{display:block;color:var(--ink);font:400 22px var(--serif);margin-bottom:6px}
+.mail{background:var(--bg);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.mh{padding:12px 16px;border-bottom:1px solid var(--line);font-size:13px;color:var(--mute)}
+.mh b{display:block;color:var(--ink);font-size:15px;font-weight:600}
+.mb{padding:18px 18px 8px}
+.mb .intro{font:italic 400 16px var(--serif);margin:0 0 6px}
+.mi{padding:12px 0;border-top:1px solid var(--line)}
+.mi:first-of-type{border-top:0}
+.mi a{font:600 16px/1.3 var(--serif);color:var(--accent);text-decoration:none}
+.mi .ab{font-size:13.5px;margin-top:3px}
+.fb{font-size:12.5px;color:var(--mute);margin-top:5px}
+.mf{padding:12px 18px;border-top:1px solid var(--line);font-size:12px;color:var(--mute)}
+.note{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--warn-bg);color:var(--warn-ink);border:1px solid var(--warn-line);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:14px}
+.note button{all:unset;cursor:pointer;font-weight:600;color:var(--warn-ink);border:1.5px solid currentColor;border-radius:8px;padding:4px 11px;font-size:13px;white-space:nowrap}
+.note button:hover{background:var(--warn-line)}
+.note button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sum{background:var(--soft);border-radius:10px;padding:11px 13px;margin-bottom:16px;font-size:14px}
+.sum.bad{background:var(--warn-bg);color:var(--warn-ink);border:1px solid var(--warn-line)}
+@media(prefers-reduced-motion:no-preference){.paper{animation:in .25s ease}@keyframes in{from{opacity:.3}to{opacity:1}}}
+
+.wrap{max-width:760px}
+a.logo{color:inherit;text-decoration:none}
+.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+h1{font-size:clamp(28px,4vw,38px);margin:0}
+.who{color:var(--mute);margin:0 0 26px}
+.al{margin-bottom:14px}
+.al.paused{opacity:.82}
+.ah{display:flex;gap:10px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+.at{font:600 20px/1.25 var(--serif);margin:0;overflow-wrap:anywhere}
+.badge{border-radius:6px;padding:2px 9px;font-size:12.5px;font-weight:600;background:var(--soft);white-space:nowrap}
+.badge.on{border:1px solid var(--ok);color:var(--ok);background:transparent}
+.badge.wait{background:var(--warn-bg);color:var(--warn-ink);border:1px solid var(--warn-line)}
+.as{color:var(--mute);font-size:14px;margin:6px 0 14px}
+.acts{display:flex;gap:8px;flex-wrap:wrap}
+.b2{all:unset;cursor:pointer;border:1.5px solid var(--line);border-radius:9px;padding:7px 14px;font-weight:600;font-size:14px}
+.b2:hover{border-color:var(--accent)}
+.b2:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.b2.danger{color:var(--bad)}
+.b2.danger:hover{border-color:var(--bad)}
+.b2[disabled]{opacity:.5;cursor:not-allowed}
+.edit{border-top:1px solid var(--line);margin-top:16px;padding-top:18px}
+.edit .acts{margin-top:4px}
+.foot{margin-top:34px;padding-top:20px;border-top:1px solid var(--line);color:var(--mute);font-size:14px}
+.foot .acts{margin-top:10px}
+.banner{border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:14.5px}
+.banner.warn{background:var(--warn-bg);color:var(--warn-ink);border:1px solid var(--warn-line)}
+.banner.ok{background:var(--soft)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:10px;font-weight:500;font-size:14px;max-width:90vw;z-index:9}
+.center{text-align:center;padding:60px 10px}
+.center h1{margin-bottom:10px}
+.center p{color:var(--mute);max-width:28em;margin:0 auto 18px}
+.pv{color:var(--mute);font-size:13px;margin:-8px 0 16px}
+.pv b{color:var(--ink)}
+.field.tight{margin-bottom:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><a class="logo" href="/"><i></i>{{BRAND}}</a><span class="hint" id="hint"></span></header>
+  <main id="app" aria-live="polite"><div class="center"><p>Loading your alerts…</p></div></main>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+<script>
+const API=location.protocol==="file:"?"http://127.0.0.1:5000":"";
+const TOKEN=new URLSearchParams(location.search).get("t")||"";
+const SRC={openalex:"OpenAlex",pubmed:"PubMed",arxiv:"arXiv",biorxiv:"bioRxiv"};
+const ALL=Object.keys(SRC);
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const q=t=>"“"+t.replace(/[“”"]/g,"").trim()+"”";
+const list=(a,w)=>a.length<2?a.join(""):a.slice(0,-1).join(", ")+" "+w+" "+a[a.length-1];
+const clean=t=>t.replace(/[“”"]/g,"").trim().toLowerCase();
+
+let STATE={email:"",alerts:[],unsub:false},EDIT=null,CONFIRM=null;
+
+async function call(method,path,body){
+  const r=await fetch(API+path,{method,headers:{"Authorization":"Bearer "+TOKEN,"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
+  if(r.status===204)return{ok:true};
+  const j=await r.json().catch(()=>({}));
+  return{ok:r.ok,status:r.status,j};
+}
+let tt=0;
+function toast(m){const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,3200)}
+
+function summary(a){
+  const f=a.frequency==="instant"?"Instant":a.frequency==="daily"?"Daily":"Weekly";
+  let t=f+" · "+(a.sources.length===ALL.length?"all sources":list(a.sources.map(x=>SRC[x]),"and"));
+  if(a.exclude.length)t+=" · leaving out "+list(a.exclude.map(q),"and");
+  if(a.oa_only)t+=" · open access only";
+  if(!a.preprints)t+=" · no preprints";
+  return t;
+}
+function badge(a){
+  if(STATE.unsub)return'<span class="badge">Not sending</span>';
+  if(a.status==="pending")return'<span class="badge wait">Waiting for confirmation</span>';
+  if(a.status==="paused")return'<span class="badge">Paused</span>';
+  return'<span class="badge on">Active</span>';
+}
+
+async function load(){
+  if(!TOKEN)return gone("This page needs the link from your email","Open an alert email and choose “Edit or pause your alerts”.");
+  const r=await call("GET","/api/manage").catch(()=>null);
+  if(!r)return gone("Can’t reach the server","Check that the service is running, then reload this page.");
+  if(r.status===401)return gone("This link has expired","Open a more recent email from us and choose “Edit or pause your alerts”.");
+  if(!r.ok)return gone("Something went wrong","Reload the page, or try again shortly.");
+  STATE={email:r.j.email,alerts:r.j.alerts,unsub:r.j.unsubscribed};
+  render();
+}
+function gone(h,p){$("app").innerHTML='<div class="center"><h1>'+esc(h)+'</h1><p>'+esc(p)+'</p><a class="link" href="/">Create a new alert</a></div>'}
+
+function render(){
+  $("hint").textContent=STATE.email;
+  const A=STATE.alerts;
+  let h='<div class="top"><h1>Your alerts</h1></div><p class="who">Signed in by email link as <b>'+esc(STATE.email)+'</b>.</p>';
+  if(STATE.unsub)h+='<div class="banner warn">You’ve unsubscribed, so no emails are being sent. Create a new alert on the signup page to start again.</div>';
+  if(!A.length)h+='<div class="card empty"><b>No alerts yet</b>Create one and it will appear here.<br><br><a class="btn" href="/" style="display:inline-block">Create an alert</a></div>';
+  h+=A.map(card).join("");
+  if(A.length&&!STATE.unsub)h+='<p><a class="link" href="/">+ Add another alert</a></p>';
+  h+='<div class="foot"><b style="color:var(--ink)">Email settings</b><p style="margin:6px 0 0">Stop every email from {{BRAND_JS}}, or erase your address and all alerts from our records.</p><div class="acts">'
+    +(STATE.unsub?'':(CONFIRM==="unsub"?confirmRow("Unsubscribe from all emails?","unsub"):'<button class="b2" data-a="ask-unsub">Unsubscribe from everything</button>'))
+    +(CONFIRM==="erase"?confirmRow("Erase all your data? This can’t be undone.","erase"):'<button class="b2 danger" data-a="ask-erase">Delete my data</button>')
+    +'</div><p style="margin-top:18px"><a class="link" href="/privacy">Privacy notice</a></p></div>';
+  $("app").innerHTML=h;
+  bind();
+  if(EDIT!=null)mountEditor(EDIT);
+}
+function confirmRow(t,k){return'<span style="display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="color:var(--ink)">'+t+'</span><button class="b2 danger" data-a="do-'+k+'">Yes</button><button class="b2" data-a="cancel">Cancel</button></span>'}
+
+function card(a){
+  const open=EDIT===a.id;
+  const pend=a.status==="pending";
+  return'<section class="card al'+(a.status==="paused"?" paused":"")+'" data-id="'+a.id+'"><div class="ah"><h2 class="at">'+esc(a.include.map(q).join(", "))+'</h2>'+badge(a)+'</div>'
+   +'<p class="as">'+esc(summary(a))+'</p>'
+   +(pend?'<p class="as" style="margin-top:-6px">Open the confirmation email we sent to start this alert.</p>':'')
+   +'<div class="acts">'
+   +(pend?'':'<button class="b2" data-a="toggle" data-id="'+a.id+'">'+(a.status==="paused"?"Resume":"Pause")+'</button>')
+   +'<button class="b2" data-a="edit" data-id="'+a.id+'" aria-expanded="'+open+'">'+(open?"Close":"Edit")+'</button>'
+   +(CONFIRM==="del"+a.id?confirmRow("Delete this alert?","del"+a.id):'<button class="b2 danger" data-a="ask-del" data-id="'+a.id+'">Delete</button>')
+   +'</div><div class="edit" id="ed'+a.id+'" hidden></div></section>';
+}
+
+function bind(){
+  document.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>act(b.dataset.a,+b.dataset.id,b));
+}
+async function act(a,id,btn){
+  const alert_=STATE.alerts.find(x=>x.id===id);
+  if(a==="edit"){EDIT=EDIT===id?null:id;CONFIRM=null;return render()}
+  if(a==="cancel"){CONFIRM=null;return render()}
+  if(a==="ask-del"){CONFIRM="del"+id;return render()}
+  if(a==="ask-unsub"){CONFIRM="unsub";return render()}
+  if(a==="ask-erase"){CONFIRM="erase";return render()}
+  btn.disabled=true;
+  if(a==="toggle"){
+    const next=alert_.status==="paused"?"active":"paused";
+    const r=await call("PATCH","/api/manage/alerts/"+id,{status:next});
+    if(!r.ok)toast(r.j?.error||"Couldn’t update that alert.");
+    else{Object.assign(alert_,r.j);toast(next==="paused"?"Alert paused. Nothing will be sent until you resume it.":"Alert resumed.")}
+  }else if(a.startsWith("do-del")){
+    const did=+a.slice(6);
+    const r=await call("DELETE","/api/manage/alerts/"+did);
+    CONFIRM=null;
+    if(r.ok){STATE.alerts=STATE.alerts.filter(x=>x.id!==did);if(EDIT===did)EDIT=null;toast("Alert deleted.")}else toast("Couldn’t delete that alert.");
+  }else if(a==="do-unsub"){
+    const r=await call("POST","/api/manage/unsubscribe");CONFIRM=null;
+    if(r.ok){STATE.unsub=true;toast("You’ve been unsubscribed.")}else toast("Something went wrong. Please try again.");
+  }else if(a==="do-erase"){
+    const r=await call("DELETE","/api/manage");
+    if(r.ok)return gone("Your data has been erased","Your address, alerts and feedback are gone. No more emails will be sent.");
+    CONFIRM=null;toast("Something went wrong. Please try again.");
+  }
+  render();
+}
+
+// ---------- inline editor ----------
+function tagInput(host,arr,placeholder,kind,onchange){
+  host.innerHTML='<input placeholder="'+esc(placeholder)+'" autocomplete="off" aria-label="'+esc(placeholder)+'">';
+  const inp=host.querySelector("input");
+  const draw=()=>{
+    host.querySelectorAll(".chip").forEach(c=>c.remove());
+    arr.forEach((t,i)=>{
+      const c=document.createElement("span");c.className="chip"+(kind==="exc"?" x":"");
+      c.innerHTML=esc(t)+'<button type="button" aria-label="Remove '+esc(t)+'">×</button>';
+      c.querySelector("button").onclick=e=>{e.stopPropagation();arr.splice(i,1);draw();onchange()};
+      host.insertBefore(c,inp);
+    });
+  };
+  const add=v=>{v=v.trim().replace(/,$/,"");if(v&&!arr.some(x=>clean(x)===clean(v))){arr.push(v);draw();onchange()}};
+  inp.addEventListener("keydown",e=>{
+    if(e.key==="Enter"||e.key===","){e.preventDefault();add(inp.value);inp.value=""}
+    else if(e.key==="Backspace"&&!inp.value&&arr.length){arr.pop();draw();onchange()}
+  });
+  inp.addEventListener("blur",()=>{if(inp.value.trim()){add(inp.value);inp.value=""}});
+  inp.addEventListener("input",onchange);
+  host.onclick=()=>inp.focus();
+  draw();
+  return{pending:()=>{const v=inp.value.trim();return v&&!arr.some(x=>clean(x)===clean(v))?[...arr,v]:[...arr]}};
+}
+
+function mountEditor(id){
+  const a=STATE.alerts.find(x=>x.id===id),host=$("ed"+id);if(!a||!host)return;
+  const D={include:[...a.include],exclude:[...a.exclude],sources:new Set(a.sources),oa:a.oa_only,pre:a.preprints,freq:a.frequency};
+  host.hidden=false;
+  host.innerHTML=
+   '<div class="field tight"><label>Topics to follow</label><p class="sub">Use quotes for an exact phrase.</p><div class="box" id="ei'+id+'"></div></div>'
+  +'<div class="field tight"><label>Leave out</label><p class="sub">Papers containing these terms are skipped.</p><div class="box" id="ee'+id+'"></div></div>'
+  +'<div class="field tight"><span class="lab">Where to look</span><div class="opts" style="margin-top:6px">'
+  +ALL.map(s=>'<label><input type="checkbox" data-s="'+s+'"'+(D.sources.has(s)?" checked":"")+'>'+SRC[s]+'</label>').join("")+'</div>'
+  +'<div class="opts" style="margin-top:12px"><label><input type="checkbox" id="eo'+id+'"'+(D.oa?" checked":"")+'>Open access only</label>'
+  +'<label><input type="checkbox" id="ep'+id+'"'+(D.pre?" checked":"")+'>Include preprints</label></div></div>'
+  +'<div class="field tight"><span class="lab">How often</span><div class="seg" style="margin-top:6px" role="group" aria-label="Frequency">'
+  +["instant","daily","weekly"].map(f=>'<button type="button" data-f="'+f+'" aria-pressed="'+(D.freq===f)+'">'+f[0].toUpperCase()+f.slice(1)+'</button>').join("")+'</div></div>'
+  +'<div class="pv" id="pv'+id+'"></div><div class="err" id="er'+id+'" role="alert"></div>'
+  +'<div class="acts"><button class="btn" id="sv'+id+'" type="button">Save changes</button><button class="b2" id="cn'+id+'" type="button">Cancel</button></div>';
+
+  let timer=0,seq=0;
+  const ti=tagInput($("ei"+id),D.include,"Add a topic","inc",changed);
+  const te=tagInput($("ee"+id),D.exclude,"Add a term to skip","exc",changed);
+  const conflictMsg=()=>{
+    const s=[...D.sources];
+    if(!s.length)return"Tick at least one source.";
+    if(!D.pre&&s.every(x=>x==="arxiv"||x==="biorxiv"))return"Preprints are switched off, but "+list(s.map(x=>SRC[x]),"and")+(s.length>1?" contain":" contains")+" only preprints, so this alert could never match anything.";
+    return null;
+  };
+  function changed(){
+    clearTimeout(timer);
+    const c=conflictMsg(),inc=ti.pending();
+    $("er"+id).textContent=c||"";
+    if(!inc.length||c){$("pv"+id).textContent="";return}
+    timer=setTimeout(async()=>{
+      const my=++seq;
+      try{
+        const r=await fetch(API+"/api/preview",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({include:inc,exclude:te.pending(),sources:[...D.sources],oa_only:D.oa,preprints:D.pre})});
+        const j=await r.json();if(my!==seq)return;
+        $("pv"+id).innerHTML=r.ok?'With these settings, <b>'+j.count.toLocaleString()+(j.capped?'+':'')+'</b> '+(j.count===1?"paper":"papers")+' matched in the last 30 days.':"";
+      }catch(e){}
+    },300);
+  }
+  host.querySelectorAll("[data-s]").forEach(i=>i.onchange=()=>{i.checked?D.sources.add(i.dataset.s):D.sources.delete(i.dataset.s);changed()});
+  $("eo"+id).onchange=e=>{D.oa=e.target.checked;changed()};
+  $("ep"+id).onchange=e=>{D.pre=e.target.checked;changed()};
+  host.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{D.freq=b.dataset.f;host.querySelectorAll("[data-f]").forEach(x=>x.setAttribute("aria-pressed",x===b))});
+  $("cn"+id).onclick=()=>{EDIT=null;render()};
+  $("sv"+id).onclick=async()=>{
+    const inc=ti.pending(),exc=te.pending(),c=conflictMsg();
+    if(!inc.length){$("er"+id).textContent="Add at least one topic to follow.";return}
+    if(c){$("er"+id).textContent=c;return}
+    const btn=$("sv"+id);btn.disabled=true;btn.textContent="Saving…";
+    const r=await call("PATCH","/api/manage/alerts/"+id,{include:inc,exclude:exc,sources:[...D.sources],oa_only:D.oa,preprints:D.pre,frequency:D.freq});
+    if(!r.ok){$("er"+id).textContent=r.j?.error||"Couldn’t save. Please try again.";btn.disabled=false;btn.textContent="Save changes";return}
+    Object.assign(a,r.j);EDIT=null;render();toast("Changes saved.");
+  };
+  changed();
+}
+load();
+</script>
+</body>
+</html>
