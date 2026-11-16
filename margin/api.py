@@ -16,6 +16,7 @@ import os
 import re
 import time
 from collections import defaultdict
+from datetime import timedelta
 
 from urllib.parse import quote
 
@@ -187,6 +188,16 @@ def create_app(cfg: Config | None = None, mailer=None) -> Flask:
     def health():
         n = conn().execute("SELECT COUNT(*) c FROM papers").fetchone()["c"]
         return jsonify(ok=True, papers=n)
+
+    @app.get("/api/stats")
+    def stats():
+        """What the 'papers indexed' line on the home page describes: how many recent papers we hold, since when, and how fresh."""
+        c = conn()
+        cutoff = (db.now_dt() - timedelta(days=cfg.paper_retention_days)).date().isoformat()
+        n = c.execute("SELECT COUNT(*) c FROM papers").fetchone()["c"]
+        since = c.execute("SELECT MIN(published) m FROM papers WHERE published>=?", (cutoff,)).fetchone()["m"]
+        updated = c.execute("SELECT MAX(value) m FROM state WHERE substr(key,1,12)='last_ingest_'").fetchone()["m"]
+        return jsonify(papers=n, since=since, updated=updated, every_hours=cfg.ingest_every_hours, keep_days=cfg.paper_retention_days)
 
     @app.post("/api/preview")
     def preview():
