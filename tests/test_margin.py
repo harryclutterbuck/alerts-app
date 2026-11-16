@@ -2,7 +2,7 @@ import json
 import os
 import tempfile
 import unittest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from margin import db, digest, tokens
 from margin.api import create_app
@@ -105,6 +105,11 @@ class TokenTests(unittest.TestCase):
         self.assertIsNone(tokens.verify(tokens.sign({"t": "x"}, "k", ttl=-5), "k", "x"))
 
 
+def next_monday_8am():
+    now = db.now_dt()
+    return (now + timedelta(days=(7 - now.weekday()) % 7 or 7)).replace(hour=8, minute=0, second=0, microsecond=0)
+
+
 class PipelineTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -157,20 +162,23 @@ class PipelineTests(unittest.TestCase):
             db.upsert_paper(self.conn, p)
         self.conn.commit()
         self.assertEqual(db.run_matching(self.conn), 0)
+        mon = next_monday_8am()
         self.assertEqual(self.confirm_last().status_code, 200)
+        # a weekly alert does not send the moment it is confirmed
+        self.assertEqual(digest.send_due(self.conn, self.cfg, self.mailer), 0)
         # papers that arrived before confirmation are not back-filled; new ones are matched
         n_before = len(self.mailer.sent)
         db.upsert_paper(self.conn, dict(PAPERS[0], source_id="new1", doi="10.1000/new1", title="Another CRISPR advance"))
         self.conn.commit()
         self.assertEqual(db.run_matching(self.conn), 1)
         self.assertEqual(db.run_matching(self.conn), 0)       # idempotent
-        self.assertEqual(digest.send_due(self.conn, self.cfg, self.mailer), 1)
+        self.assertEqual(digest.send_due(self.conn, self.cfg, self.mailer, now=mon), 1)
         mail = self.mailer.sent[-1]
         self.assertEqual(len(self.mailer.sent), n_before + 1)
         self.assertIn("Another CRISPR advance", mail["html"])
         self.assertEqual(mail["headers"]["List-Unsubscribe-Post"], "List-Unsubscribe=One-Click")
         # not due again until a week has passed, and nothing pending anyway
-        self.assertEqual(digest.send_due(self.conn, self.cfg, self.mailer), 0)
+        self.assertEqual(digest.send_due(self.conn, self.cfg, self.mailer, now=mon), 0)
         # one-click unsubscribe
         import re
         unsub = re.search(r"/unsubscribe/(\S+)", mail["text"]).group(1)
@@ -208,11 +216,299 @@ class PipelineTests(unittest.TestCase):
         href = re.search(r"href='(/dev/outbox/[^']+)'", r.get_data(as_text=True)).group(1)
         self.assertIn(b"Confirm my alert", self.client.get(href).data)
 
-    def test_feedback_link(self):
-        t = tokens.sign({"t": "fb", "a": 1, "p": 1, "v": "up"}, "s3cret")
-        self.assertEqual(self.client.get(f"/f/{t}").status_code, 200)
-        self.assertEqual(self.conn.execute("SELECT value FROM feedback").fetchone()[0], "up")
+    def test_manage_page_edit_resets_queue_unsubscribe_and_erase(self):
+        self.subscribe()
+        self.confirm_last()
+        tok = tokens.sign({"t": "manage", "s": 1}, "s3cret")
+        h = {"Authorization": f"Bearer {tok}"}
+        self.assertEqual(self.client.get("/manage").status_code, 200)
+        self.assertIn(b"/api/manage", self.client.get("/manage").data)
+        # a queued match must be dropped when the alert's query changes
+        db.upsert_paper(self.conn, dict(PAPERS[0], source_id="n1", doi="10.1000/n1", title="Fresh CRISPR result"))
+        self.conn.commit()
+        self.assertEqual(db.run_matching(self.conn), 1)
+        r = self.client.patch("/api/manage/alerts/1", headers=h, json={"include": ["prime editing"], "frequency": "daily"})
+        j = r.get_json()
+        self.assertEqual((j["include"], j["name"], j["frequency"]), (["prime editing"], "prime editing", "daily"))
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM matches").fetchone()[0], 0)
+        # another subscriber's alert is out of reach
+        self.subscribe("other@b.co")
+        self.confirm_last()
+        self.assertEqual(self.client.patch("/api/manage/alerts/2", headers=h, json={"status": "paused"}).status_code, 404)
+        # unsubscribe from the page
+        self.assertEqual(self.client.post("/api/manage/unsubscribe", headers=h).status_code, 200)
+        self.assertTrue(self.client.get("/api/manage", headers=h).get_json()["unsubscribed"])
+        self.assertEqual(self.client.post("/api/manage/unsubscribe").status_code, 401)
+        # erase everything
+        self.client.get(f"/f/{tokens.sign({'t': 'fb', 'a': 1, 'p': 1, 'v': 'up'}, 's3cret')}")
+        self.assertEqual(self.client.delete("/api/manage", headers=h).status_code, 204)
+        for table in ("alerts", "feedback"):
+            self.assertEqual(self.conn.execute(f"SELECT COUNT(*) FROM {table} WHERE {'subscriber_id' if table=='alerts' else 'alert_id'}=1").fetchone()[0], 0)
+        self.assertIsNone(self.conn.execute("SELECT id FROM subscribers WHERE id=1").fetchone())
+        self.assertEqual(self.client.get("/api/manage", headers=h).status_code, 401)   # the old link no longer works
 
+    def test_openalex_key_budget_and_refusals(self):
+        import urllib.error
+        seen = []
+        def ok(url, params=None, **k):
+            seen.append(params)
+            return json.dumps({"results": [{"id": "https://openalex.org/W%d" % len(seen), "display_name": "T",
+                                            "publication_date": "2026-11-01"}], "meta": {"next_cursor": "more"}}).encode()
+        got = list(openalex.fetch(date(2026, 11, 1), "a@b.c", "KEY123", max_pages=3, http=ok))
+        self.assertEqual(len(got), 3)                                  # the page cap stops an unbounded crawl
+        self.assertTrue(all(p["api_key"] == "KEY123" for p in seen))
+        self.assertTrue(all(p["sort"] == "publication_date:desc" for p in seen))
+        self.assertNotIn("api_key", (lambda: (seen.clear(), list(openalex.fetch(date(2026, 11, 1), "a@b.c", "", 1, ok)), seen[0])[2])())
+        def refuse(code):
+            def f(*a, **k):
+                raise urllib.error.HTTPError("u", code, "x", {}, None)
+            return f
+        for code, word in ((403, "verification"), (429, "midnight"), (401, "OPENALEX_API_KEY")):
+            with self.assertRaises(RuntimeError) as cm:
+                list(openalex.fetch(date(2026, 11, 1), "a@b.c", "k", http=refuse(code)))
+            self.assertIn(word, str(cm.exception))
+        # a refusal is reported, saved papers are kept, and other sources still run
+        from margin.ingest import run_ingest
+        def two_then_refuse():
+            yield dict(PAPERS[0], source_id="oa1", doi="10.1/oa1", source="openalex")
+            raise RuntimeError("budget used")
+        stats = run_ingest(self.conn, self.cfg, fetch_map={"openalex": two_then_refuse, "arxiv": lambda: iter([PAPERS[2]])})
+        self.assertEqual((stats["openalex"]["new"], stats["arxiv"]["new"]), (1, 1))
+        self.assertIn("openalex", stats["_errors"])
+
+    def test_preview_says_when_a_broad_search_was_cut_short(self):
+        self.conn.executemany("INSERT INTO papers(doi,source,source_id,title,abstract,authors,venue,published,url,is_oa,is_preprint,ingested_at) "
+                              "VALUES(?,?,?,?,?,'[]','J',?,'u',0,0,'x')",
+                              [(f"10.2/{i}", "pubmed", f"b{i}", "zzbroad finding", "text", db.now_dt().date().isoformat()) for i in range(2005)])
+        self.conn.commit()
+        r = self.client.post("/api/preview", json={"include": ["zzbroad"]}).get_json()
+        self.assertEqual((r["count"], r["capped"]), (2000, True))
+        r = self.client.post("/api/preview", json={"include": ["zzbroad finding"], "exclude": ["text"]}).get_json()
+        self.assertEqual(r["capped"], True)                              # still truncated before the exclude was applied
+        self.assertFalse(self.client.post("/api/preview", json={"include": ["nonexistentword"]}).get_json()["capped"])
+
+    def test_schedule_is_fixed_not_drifting(self):
+        cfg = self.cfg
+        mk = lambda freq, last=None, act="2026-11-09T10:00:00+00:00": {"frequency": freq, "last_sent_at": last, "activated_at": act, "created_at": act}
+        D = lambda s: datetime.fromisoformat(s).replace(tzinfo=timezone.utc)
+        # 2026-11-09 is a Monday. Weekly alert activated Mon 10:00 must wait for the NEXT Monday 07:00.
+        w = mk("weekly")
+        self.assertFalse(digest.is_due(w, D("2026-11-09T11:00:00"), cfg))
+        self.assertFalse(digest.is_due(w, D("2026-11-15T23:00:00"), cfg))          # Sunday: not yet
+        self.assertFalse(digest.is_due(w, D("2026-11-16T06:59:00"), cfg))          # Monday before 07:00
+        self.assertTrue(digest.is_due(w, D("2026-11-16T07:00:00"), cfg))
+        sent = mk("weekly", last="2026-11-16T07:30:00+00:00")                       # sent a little late: no drift
+        self.assertFalse(digest.is_due(sent, D("2026-11-22T12:00:00"), cfg))
+        self.assertTrue(digest.is_due(sent, D("2026-11-23T07:00:00"), cfg))
+        d = mk("daily", last="2026-11-10T07:05:00+00:00")
+        self.assertFalse(digest.is_due(d, D("2026-11-10T20:00:00"), cfg))
+        self.assertTrue(digest.is_due(d, D("2026-11-11T07:00:00"), cfg))
+        self.assertTrue(digest.is_due(mk("instant", last="2026-11-10T07:05:00+00:00"), D("2026-11-10T07:06:00"), cfg))
+        self.assertTrue(digest.is_due(w, D("2026-11-10T01:00:00"), cfg, force=True))
+        # a down worker misses Monday; the digest still goes out as soon as it is back
+        self.assertTrue(digest.is_due(sent, D("2026-11-25T15:00:00"), cfg))
+
+    def test_cleanup_and_backup(self):
+        import glob
+        self.subscribe("stale@b.co")                       # never confirmed
+        self.conn.execute("UPDATE subscribers SET created_at='2020-01-01T00:00:00+00:00'")
+        old, _ = db.upsert_paper(self.conn, dict(PAPERS[0], source_id="o", doi="10.1/o", published="2020-01-01"))
+        kept, _ = db.upsert_paper(self.conn, dict(PAPERS[1], source_id="k", doi="10.1/k", published="2020-01-01"))
+        self.conn.execute("INSERT INTO feedback(alert_id,paper_id,value,created_at) VALUES(1,?,'up','x')", (kept,))
+        fresh, _ = db.upsert_paper(self.conn, PAPERS[2])
+        self.conn.commit()
+        r = db.cleanup(self.conn, retention_days=120)
+        self.assertEqual(r, {"unconfirmed_signups_removed": 1, "old_papers_removed": 1})
+        ids = {x[0] for x in self.conn.execute("SELECT id FROM papers")}
+        self.assertEqual(ids, {kept, fresh})               # old paper gone; one with feedback and the fresh one stay
+        for i in range(4):
+            path = db.backup(self.conn, os.path.join(self.tmp.name, "bk"), keep=2, now=db.now_dt() + timedelta(seconds=i))
+        self.assertEqual(len(glob.glob(os.path.join(self.tmp.name, "bk", "margin-data-*.db"))), 2)
+        snap = db.connect(path)                       # a backup holds people, alerts and feedback, not the whole paper corpus
+        self.assertEqual(snap.execute("SELECT COUNT(*) FROM papers").fetchone()[0], 1)          # only the paper with feedback
+        self.assertEqual(snap.execute("SELECT COUNT(*) FROM subscribers").fetchone()[0], self.conn.execute("SELECT COUNT(*) FROM subscribers").fetchone()[0])
+
+    def test_production_checks_headers_proxy_and_privacy(self):
+        bad = Config(mailer="smtp")
+        self.assertGreaterEqual(len(bad.problems()), 4)
+        with self.assertRaises(RuntimeError):
+            create_app(Config(mailer="smtp", db_path=self.cfg.db_path))
+        good = Config(mailer="smtp", secret="x" * 40, base_url="https://margin.example.org", from_addr="Margin <a@margin.example.org>",
+                      contact_email="hello@margin.example.org", smtp_host="h", smtp_user="u", smtp_password="p", operator="Harry C",
+                      providers="Render (hosting) and Resend (email)")
+        self.assertEqual(good.problems(), [])
+        r = self.client.get("/privacy")
+        self.assertIn(b"Not ready to publish", r.data)      # unfilled template cannot go live unnoticed
+        app = create_app(good, self.mailer)
+        r = app.test_client().get("/privacy")
+        self.assertIn(b"Harry C", r.data)
+        self.assertNotIn(b"Not ready to publish", r.data)
+        self.assertNotIn(b"{{", r.data)
+        h = app.test_client().get("/manage").headers
+        self.assertEqual((h["X-Frame-Options"], h["Referrer-Policy"], h["Cache-Control"]), ("DENY", "no-referrer", "no-store"))
+        self.assertIn("Strict-Transport-Security", h)
+        self.assertNotIn("Access-Control-Allow-Origin", h)
+        # rate limit is per visitor behind a proxy, not shared by everyone
+        from dataclasses import replace
+        px = create_app(replace(self.cfg, trust_proxy=True), self.mailer).test_client()
+        body = {"email": "a@b.co", "alert": {"include": ["x"]}}
+        codes = [px.post("/api/subscribe", json=body, headers={"X-Forwarded-For": "1.1.1.1"}).status_code for _ in range(6)]
+        self.assertEqual(codes[-1], 429)
+        self.assertEqual(px.post("/api/subscribe", json=body, headers={"X-Forwarded-For": "2.2.2.2"}).status_code, 202)
+
+    def test_each_source_has_its_own_lookback(self):
+        from unittest import mock
+        from margin.ingest import run_ingest, LOOKBACK_DAYS
+        seen = {}
+        def rec(name):
+            return lambda since, *a, **k: (seen.__setitem__(name, since), iter([]))[1]
+        today = db.now_dt().date()
+        with mock.patch("margin.ingest.openalex.fetch", rec("openalex")), mock.patch("margin.ingest.arxiv.fetch", rec("arxiv")), \
+             mock.patch("margin.ingest.pubmed.fetch", rec("pubmed")):
+            run_ingest(self.conn, self.cfg)
+            self.assertEqual({k: (today - v).days for k, v in seen.items()}, LOOKBACK_DAYS)
+            run_ingest(self.conn, self.cfg, days=5)                      # an explicit window applies to all
+            self.assertEqual({(today - v).days for v in seen.values()}, {5})
+        self.assertLess(LOOKBACK_DAYS["pubmed"] * 7000, 10000)          # a PubMed window must stay under its 10,000 cap
+
+    def test_worker_tick_timers(self):
+        from dataclasses import replace
+        from margin import worker
+        cfg = replace(self.cfg, backup_dir=os.path.join(self.tmp.name, "bk"))
+        calls = []
+        fm = {"arxiv": lambda: (calls.append(1), iter([]))[1]}
+        t0 = db.now_dt()
+        r1 = worker.tick(self.conn, cfg, self.mailer, now=t0, fetch_map=fm)
+        self.assertEqual((len(calls), "backup" in r1), (1, True))              # first pass does everything
+        r2 = worker.tick(self.conn, cfg, self.mailer, now=t0 + timedelta(minutes=15), fetch_map=fm)
+        self.assertEqual((len(calls), "ingest" in r2, "backup" in r2), (1, False, False))   # heavy steps wait
+        r3 = worker.tick(self.conn, cfg, self.mailer, now=t0 + timedelta(hours=cfg.ingest_every_hours, minutes=1), fetch_map=fm)
+        self.assertEqual((len(calls), "backup" in r3), (2, False))
+
+    def test_feedback_link_one_vote_per_paper_and_unknown_alert(self):
+        self.subscribe()
+        self.confirm_last()
+        pid, _ = db.upsert_paper(self.conn, PAPERS[0])
+        self.conn.commit()
+        up = tokens.sign({"t": "fb", "a": 1, "p": pid, "v": "up"}, "s3cret")
+        down = tokens.sign({"t": "fb", "a": 1, "p": pid, "v": "down"}, "s3cret")
+        self.assertIn(b"higher", self.client.get(f"/f/{up}").data)
+        r = self.client.get(f"/f/{down}")                      # changed their mind
+        self.assertIn(b"lower", r.data)
+        self.assertIn(b"/manage?t=", r.data)                   # offers a leave-out term
+        rows = self.conn.execute("SELECT value FROM feedback WHERE alert_id=1 AND paper_id=?", (pid,)).fetchall()
+        self.assertEqual([x["value"] for x in rows], ["down"])
+        ghost = tokens.sign({"t": "fb", "a": 99, "p": pid, "v": "up"}, "s3cret")
+        self.assertEqual(self.client.get(f"/f/{ghost}").status_code, 404)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM feedback").fetchone()[0], 1)
+
+    def test_feedback_reorders_digest_but_never_hides(self):
+        from margin import rank
+        self.subscribe(include=["microbiome"], exclude=[])
+        self.confirm_last()
+        mk = lambda sid, title, abstract, day: db.upsert_paper(self.conn, dict(
+            source="pubmed", source_id=sid, doi=f"10.1/{sid}", title=title, abstract=abstract, authors=["A B"],
+            venue="J", published=day, url="u"))[0]
+        liked = mk("l", "Gut microbiome shapes immunotherapy response in melanoma patients",
+                   "Tumour response to checkpoint immunotherapy depends on gut bacteria in melanoma patients.", "2026-11-01")
+        bad = mk("d", "Microbiome engineering for methane reduction in dairy cattle",
+                 "Rumen bacteria and seaweed supplements lower methane emissions from dairy cattle.", "2026-11-01")
+        like_new = mk("c1", "Microbiome profiles predict immunotherapy response in a melanoma cohort",
+                      "Gut bacteria composition separates responders to checkpoint immunotherapy in melanoma.", "2026-11-02")
+        bad_new = mk("c2", "Rumen microbiome shifts in dairy cattle fed seaweed",
+                     "Seaweed supplements change bacteria in the cattle rumen and lower methane from dairy cows.", "2026-11-09")
+        self.conn.commit()
+        alert = self.conn.execute("SELECT * FROM alerts WHERE id=1").fetchone()
+        rows = lambda: self.conn.execute("SELECT p.*, 3 AS score FROM papers p WHERE id IN (?,?) ORDER BY published DESC", (like_new, bad_new)).fetchall()
+        order = lambda: [r["source_id"] for r in rank.rerank(self.conn, alert, rows())]
+        self.assertEqual(order(), ["c2", "c1"])                 # no feedback: same keyword score, newest first
+        for pid, v in ((liked, "up"), (bad, "down")):
+            self.client.get("/f/" + tokens.sign({"t": "fb", "a": 1, "p": pid, "v": v}, "s3cret"))
+        self.assertEqual(order(), ["c1", "c2"])                 # learned: liked-style paper now leads
+        self.assertEqual(len(order()), 2)                       # and nothing was dropped
+
+    def test_stats(self):
+        from margin import rank
+        self.subscribe()
+        self.confirm_last()
+        pid, _ = db.upsert_paper(self.conn, PAPERS[0])
+        self.conn.execute("INSERT INTO matches(alert_id,paper_id,score,created_at,sent_at) VALUES(1,?,3,'x','y')", (pid,))
+        self.conn.commit()
+        self.client.get("/f/" + tokens.sign({"t": "fb", "a": 1, "p": pid, "v": "up"}, "s3cret"))
+        s = rank.feedback_stats(self.conn)[0]
+        self.assertEqual((s["sent"], s["up"], s["down"], s["relevant_rate"], s["response_rate"]), (1, 1, 0, 1.0, 1.0))
+
+    def test_brand_is_one_setting_everywhere_subscribers_look(self):
+        import re
+        from dataclasses import replace
+        cfg = replace(self.cfg, brand="Test'Name", operator="Op Ltd", contact_email="hi@x.org")
+        mailer = ConsoleMailer(cfg)
+        c = create_app(cfg, mailer).test_client()
+        for path in ("/", "/manage", "/privacy"):
+            body = c.get(path).data.decode()
+            self.assertNotIn("{{", body, path)
+            self.assertNotIn("Margin", body, path)
+            self.assertIn("Test", body, path)
+        self.assertIn("From Test\\'Name", c.get("/").data.decode())      # inside a JS string, so the quote is escaped
+        r = c.post("/api/subscribe", json={"email": "a@b.co", "alert": {"include": ["crispr"], "exclude": [], "frequency": "weekly"}})
+        self.assertEqual(r.status_code, 202)
+        self.assertIn("Test'Name", mailer.sent[-1]["subject"])
+        self.assertNotIn("Margin", mailer.sent[-1]["subject"] + mailer.sent[-1]["text"] + mailer.sent[-1]["html"])
+        c.get("/confirm/" + re.search(r"/confirm/(\S+)", mailer.sent[-1]["text"]).group(1))
+        db.upsert_paper(self.conn, dict(PAPERS[0], source_id="b1", doi="10.1000/b1", title="Brand test CRISPR paper"))
+        self.conn.commit()
+        db.run_matching(self.conn)
+        self.assertEqual(digest.send_due(self.conn, cfg, mailer, now=next_monday_8am()), 1)
+        mail = mailer.sent[-1]
+        self.assertIn("Test&#x27;Name", mail["html"])
+        self.assertIn("Test'Name", mail["text"])
+        self.assertNotIn("Margin", mail["html"] + mail["text"])
+
+    def test_settings_typos_are_caught_or_tidied(self):
+        from margin.config import _url
+        self.assertEqual(_url(" HTTPS://alerts.onrender.com/ "), "https://alerts.onrender.com")
+        base = dict(mailer="smtp", secret="x" * 40, base_url="https://a.org", contact_email="hi@a.org",
+                    smtp_host="h", smtp_user="u", smtp_password="p", operator="O")
+        for ok in ("Margin <alerts@a.org>", "alerts@a.org", "onboarding@resend.dev"):
+            self.assertEqual(Config(**base, from_addr=ok).problems(), [], ok)
+        for bad in ("Margin onboarding@resend.dev", "Margin <alerts@a.org", "alerts", "<>"):
+            self.assertTrue(any("MARGIN_FROM" in x for x in Config(**base, from_addr=bad).problems()), bad)
+
+    def test_failed_confirmation_email_gives_clear_message_and_leaves_nothing_pending(self):
+        class Broken:
+            def send(self, *a, **k):
+                raise OSError("auth failed")
+        c = create_app(self.cfg, Broken()).test_client()
+        r = c.post("/api/subscribe", json={"email": "a@b.co", "alert": {"include": ["crispr"], "exclude": [], "frequency": "weekly"}})
+        self.assertEqual(r.status_code, 503)
+        self.assertIn("couldn", r.get_json()["error"])
+        self.assertNotIn("auth failed", r.get_json()["error"])          # no internals shown to visitors
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0], 0)
+
+    def test_privacy_warning_until_providers_are_named(self):
+        from dataclasses import replace
+        c = create_app(replace(self.cfg, operator="Op", contact_email="hi@x.org", providers="Render <EU> and Resend"), self.mailer).test_client()
+        body = c.get("/privacy").data.decode()
+        self.assertIn("Render &lt;EU&gt; and Resend", body)            # escaped
+        self.assertNotIn("Not ready to publish", body)
+        c2 = create_app(replace(self.cfg, operator="Op", contact_email="hi@x.org"), self.mailer).test_client()
+        self.assertIn("Not ready to publish", c2.get("/privacy").data.decode())
+
+    def test_stats_describe_what_the_counter_counts(self):
+        from datetime import timedelta
+        today = db.now_dt().date()
+        for i, (d, src) in enumerate([(today - timedelta(days=1), "arxiv"), (today - timedelta(days=3), "pubmed"), (today.replace(year=today.year - 5), "pubmed")]):
+            db.upsert_paper(self.conn, dict(PAPERS[0], source=src, source_id=f"st{i}", doi=f"10.1000/st{i}", published=d.isoformat()))
+        db.set_state(self.conn, "last_ingest_arxiv", db.now_iso())
+        self.conn.commit()
+        j = self.client.get("/api/stats").get_json()
+        self.assertEqual(j["papers"], 3)
+        self.assertEqual(j["since"], (today - timedelta(days=3)).isoformat())     # ignores the five-year-old record
+        self.assertTrue(j["updated"].endswith("+00:00"))
+        self.assertEqual((j["every_hours"], j["keep_days"]), (self.cfg.ingest_every_hours, self.cfg.paper_retention_days))
+        home = self.client.get("/").data.decode()
+        self.assertIn("/api/stats", home)
+        self.assertNotIn("papers indexed", home)
 
 if __name__ == "__main__":
     unittest.main()
