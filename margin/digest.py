@@ -40,6 +40,48 @@ def link(cfg, kind, **kw):
     return tokens.sign({"t": kind, **kw}, cfg.secret, ttl=ttl)
 
 
+_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+
+def when_text(cfg, freq):
+    """Plain-English description of when an alert's emails arrive."""
+    if freq == "instant":
+        return "an email shortly after a matching paper turns up"
+    if freq == "daily":
+        return "a digest each morning"
+    return f"a digest every {_DAYS[cfg.digest_weekday % 7]} morning"
+
+
+def confirm_email(cfg, name, freq, url):
+    """The 'please confirm' email: returns (subject, html, text). Styled like the digest so the brand feels consistent."""
+    brand, who = H.escape(cfg.brand), (f" {H.escape(cfg.brand)} is run by {H.escape(cfg.operator)}." if cfg.operator else "")
+    when = when_text(cfg, freq)
+    subject = f"Confirm your {cfg.brand} alert"
+    html = (
+        f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+        f'<meta name="color-scheme" content="light"><title>{H.escape(subject)}</title></head>'
+        f'<body style="margin:0;background:#EDF1F7;padding:24px 12px">'
+        f'<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#EDF1F7">One tap to start your alert for “{H.escape(name)}”.</div>'
+        f'<div style="max-width:520px;margin:0 auto;background:#ffffff;border:1px solid {LINE};border-radius:14px;padding:30px 32px">'
+        f'<div style="font:600 22px {SERIF};color:{INK}">{brand}</div>'
+        f'<div style="font:400 28px/1.15 {SERIF};color:{INK};margin:26px 0 8px">Confirm your alert</div>'
+        f'<div style="font:15px/1.55 {SANS};color:{MUTE}">One tap and you’re set. We’ll email you new research on:</div>'
+        f'<div style="margin:16px 0 8px;padding:14px 16px;background:#E7E8FD;border-radius:10px;font:600 17px/1.35 {SERIF};color:{INK}">{H.escape(name)}</div>'
+        f'<div style="font:13.5px/1.5 {SANS};color:{MUTE};margin-bottom:24px">You’ll get {H.escape(when)}.</div>'
+        f'<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="{ACCENT}" style="border-radius:10px">'
+        f'<a href="{H.escape(url)}" style="display:inline-block;padding:13px 28px;font:600 16px {SANS};color:#ffffff;text-decoration:none;border-radius:10px">Confirm my alert</a>'
+        f'</td></tr></table>'
+        f'<div style="font:12.5px/1.55 {SANS};color:{MUTE};margin-top:22px">Button not working? Copy this link into your browser:<br>'
+        f'<a href="{H.escape(url)}" style="color:{ACCENT};word-break:break-all">{H.escape(url)}</a></div>'
+        f'<div style="border-top:1px solid {LINE};margin-top:26px;padding-top:14px;font:12px/1.55 {SANS};color:{MUTE}">'
+        f'If you didn’t ask for this, ignore this email and nothing will happen. The link works for 7 days.{who}</div>'
+        f'</div></body></html>')
+    text = (f"Confirm your {cfg.brand} alert for “{name}”.\n\nYou'll get {when}.\n\nConfirm here:\n{url}\n\n"
+            "If you didn't ask for this, ignore this email and nothing will happen. The link works for 7 days."
+            + (f"\n\n{cfg.brand} is run by {cfg.operator}." if cfg.operator else ""))
+    return subject, html, text
+
+
 def _snippet(text, n=300):
     text = " ".join((text or "").split())
     return text if len(text) <= n else text[:n].rsplit(" ", 1)[0] + "…"

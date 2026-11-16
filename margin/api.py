@@ -24,7 +24,7 @@ from flask import Flask, Response, g, jsonify, request, send_from_directory
 
 from . import db, tokens
 from .config import Config
-from .digest import link
+from .digest import confirm_email, link, when_text
 from .mailer import make_mailer
 from .matcher import AlertSpec
 
@@ -76,11 +76,44 @@ def clean_alert(d: dict, partial=False) -> dict:
     return out
 
 
-def page(title, body):
+_PAGE_CSS = """
+:root{--bg:#EDF1F7;--panel:#fff;--ink:#101828;--mute:#5B6577;--line:#D9DFEA;--accent:#3A39E8;--accent-ink:#fff;--ok:#0F7B53;
+--sans:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;--serif:"Newsreader",Georgia,"Times New Roman",serif}
+@media (prefers-color-scheme:dark){:root{--bg:#0C1220;--panel:#141C2E;--ink:#E9EDF6;--mute:#9AA5BA;--line:#27324A;--accent:#8B8BFF;--accent-ink:#0C1220;--ok:#4CC999}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
+.wrap{max-width:520px;margin:0 auto;padding:28px 20px 56px}
+.logo{font:600 22px var(--serif);letter-spacing:-.01em;display:flex;align-items:center;gap:9px;color:var(--ink);text-decoration:none;margin-bottom:28px}
+.logo i{width:22px;height:22px;border:2px solid var(--accent);border-right-width:7px;border-radius:3px;display:block}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:34px 28px;text-align:center}
+.tick{width:46px;height:46px;border-radius:50%;background:var(--ok);color:var(--panel);display:grid;place-items:center;margin:0 auto 14px;font-size:22px}
+h1{font:400 clamp(26px,6vw,32px)/1.15 var(--serif);letter-spacing:-.01em;margin:0 0 10px}
+p{color:var(--mute);margin:0 auto 16px;max-width:30em}
+.chip{display:inline-block;background:var(--line);color:var(--ink);border-radius:8px;padding:6px 12px;font:600 15px var(--serif);margin:2px 0 14px}
+.btn{display:inline-block;background:var(--accent);color:var(--accent-ink);font:600 15px var(--sans);padding:12px 22px;border-radius:10px;text-decoration:none;border:0;cursor:pointer}
+.btn:hover{filter:brightness(1.08)}
+.btn:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.btn.quiet{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+a{color:var(--accent)}
+.more{margin:18px 0 0;font-size:14px}
+.fine{font-size:12.5px;color:var(--mute);margin:22px auto 0;max-width:30em;text-align:center}
+@media(max-width:480px){.card{padding:28px 20px}}
+"""
+
+
+def render_simple_page(brand, title, body, tick=False):
+    """A small page in the same look as the home page, for confirmation, unsubscribe and expired-link screens."""
+    b = H.escape(brand)
     return Response(
-        f"<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
-        f"<title>{H.escape(title)}</title><body style=\"font:16px/1.5 system-ui;max-width:30em;margin:12vh auto;padding:0 20px\">"
-        f"<h1 style='font:400 30px Georgia,serif'>{H.escape(title)}</h1>{body}</body>", mimetype="text/html")
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
+        f'<title>{H.escape(title)} · {b}</title>'
+        '<link rel="preconnect" href="https://fonts.googleapis.com">'
+        '<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Newsreader:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">'
+        f'<style>{_PAGE_CSS}</style></head><body><div class="wrap">'
+        f'<a class="logo" href="/"><i></i>{b}</a>'
+        f'<main class="card">{"<div class=tick aria-hidden=true>✓</div>" if tick else ""}<h1>{H.escape(title)}</h1>{body}</main>'
+        '</div></body></html>', mimetype="text/html")
 
 
 def create_app(cfg: Config | None = None, mailer=None) -> Flask:
@@ -88,6 +121,10 @@ def create_app(cfg: Config | None = None, mailer=None) -> Flask:
     if cfg.mailer != "console" and cfg.problems():
         raise RuntimeError("Not ready to send real email:\n- " + "\n- ".join(cfg.problems()))
     app = Flask(__name__)
+
+    def page(title, body, tick=False):
+        return render_simple_page(cfg.brand, title, body, tick)
+
     if cfg.trust_proxy:
         # Behind the host's HTTPS proxy every request arrives from the proxy; believe its one forwarded address
         # so that rate limits apply per visitor and not to everyone at once.
@@ -228,14 +265,9 @@ def create_app(cfg: Config | None = None, mailer=None) -> Flask:
              int(a["oa_only"]), int(a["preprints"]), a["frequency"], db.now_iso()))
         c.commit()
         url = f"{cfg.base_url}/confirm/{link(cfg, 'confirm', s=sub['id'], a=cur.lastrowid)}"
-        text = (f"Confirm your {cfg.brand} alert for “{a['name']}” ({a['frequency']}):\n{url}\n\n"
-                "If you didn't ask for this, ignore this email and nothing will happen.")
-        body = (f"<p style='font:16px system-ui'>Confirm your alert for <b>“{H.escape(a['name'])}”</b> "
-                f"({a['frequency']}).</p><p><a href='{url}' style='font:600 16px system-ui'>Confirm my alert</a></p>"
-                "<p style='color:#5B6577;font:13px system-ui'>If you didn’t ask for this, ignore this email and nothing will happen."
-                + (f" {H.escape(cfg.brand)} is run by {H.escape(cfg.operator)}." if cfg.operator else "") + "</p>")
+        subject, body, text = confirm_email(cfg, a['name'], a['frequency'], url)
         try:
-            mailer.send(email, f"Confirm your {cfg.brand} alert", body, text)
+            mailer.send(email, subject, body, text)
         except Exception as exc:                      # most often a wrong email-provider setting: say so in the log, kindly to the visitor
             app.logger.error("Could not send the confirmation email (%s: %s). Check the SMTP_* and MARGIN_FROM settings.", type(exc).__name__, exc)
             c.execute("DELETE FROM alerts WHERE id=?", (cur.lastrowid,))
@@ -248,7 +280,8 @@ def create_app(cfg: Config | None = None, mailer=None) -> Flask:
     def confirm(token):
         p = tokens.verify(token, cfg.secret, "confirm")
         if not p:
-            return page("This link has expired", "<p>Request a new alert from the signup page.</p>"), 400
+            return page("This link has expired", "<p>Confirmation links work for 7 days. You can set up the alert again in a minute.</p>"
+                        f"<a class='btn' href='/'>Create an alert</a>"), 400
         c = conn()
         c.execute("""UPDATE subscribers SET confirmed_at=COALESCE(confirmed_at,?), consent_text=COALESCE(consent_text,?),
                      unsubscribed_at=NULL WHERE id=?""", (db.now_iso(), CONSENT, p["s"]))
@@ -256,20 +289,29 @@ def create_app(cfg: Config | None = None, mailer=None) -> Flask:
                   (db.now_iso(), p["a"], p["s"]))
         c.commit()
         manage = f"{cfg.frontend_url}/manage?t={link(cfg, 'manage', s=p['s'])}"
-        return page("You’re subscribed", "<p>Your alert is active. New matching papers will arrive in your next digest.</p>"
-                    f"<p><a href='{manage}'>Manage your alerts</a></p>")
+        al = c.execute("SELECT name, frequency FROM alerts WHERE id=? AND subscriber_id=?", (p["a"], p["s"])).fetchone()
+        what = (f"<div class='chip'>{H.escape(al['name'])}</div><p>You’ll get {H.escape(when_text(cfg, al['frequency']))}.</p>"
+                if al else "<p>Your alert is active.</p>")
+        return page("You’re subscribed", what +
+                    "<p>We only send papers that appear from now on, so you’ll hear from us when something new matches. "
+                    "You can change or pause this alert any time.</p>"
+                    f"<a class='btn' href='{H.escape(manage)}'>Manage your alerts</a>"
+                    "<p class='more'><a href='/'>Create another alert</a></p>", tick=True)
 
     @app.route("/unsubscribe/<token>", methods=["GET", "POST"])
     def unsubscribe(token):
         p = tokens.verify(token, cfg.secret, "unsub")
         if not p:
-            return page("This link has expired", "<p>Use the link in a more recent email.</p>"), 400
+            return page("This link has expired", "<p>Use the link in a more recent email, or create a fresh alert.</p>"
+                        "<a class='btn' href='/'>Back to the home page</a>"), 400
         if request.method == "POST":
             conn().execute("UPDATE subscribers SET unsubscribed_at=? WHERE id=?", (db.now_iso(), p["s"]))
             conn().commit()
-            return page("You’ve been unsubscribed", "<p>No more emails will be sent.</p>")
-        return page("Unsubscribe?", f"<form method=post><button style='font:600 16px system-ui;padding:10px 18px'>"
-                                    "Yes, unsubscribe me from all alerts</button></form>")
+            return page("You’ve been unsubscribed", "<p>No more emails will be sent to this address. Sorry to see you go.</p>"
+                        "<p class='more'>Changed your mind? <a href='/'>Create a new alert</a></p>", tick=True)
+        return page("Unsubscribe?", "<p>This stops every alert on this email address. You can always sign up again later.</p>"
+                                    "<form method=post><button class='btn'>Yes, unsubscribe me from all alerts</button></form>"
+                                    "<p class='more'><a href='/'>No, keep my alerts</a></p>")
 
     @app.get("/f/<token>")
     def feedback(token):
@@ -287,9 +329,9 @@ def create_app(cfg: Config | None = None, mailer=None) -> Flask:
         c.commit()
         manage = f"{cfg.frontend_url}/manage?t={link(cfg, 'manage', s=alert['subscriber_id'])}"
         if p["v"] == "up":
-            return page("Thanks", "<p>We’ll rank papers like this one higher in your next digests.</p>")
+            return page("Thanks", "<p>We’ll rank papers like this one higher in your next digests.</p>", tick=True)
         return page("Thanks", "<p>We’ll rank papers like this one lower in your next digests.</p>"
-                              f"<p>Want to block a topic completely? <a href='{manage}'>Add a “leave out” term</a>.</p>")
+                              f"<p>Want to block a topic completely? <a href='{H.escape(manage)}'>Add a “leave out” term</a>.</p>", tick=True)
 
     def manage_sub():
         auth = request.headers.get("Authorization", "")
