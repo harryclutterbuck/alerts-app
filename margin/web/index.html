@@ -23,19 +23,20 @@ html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *,*::before,*::after{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
 .wrap{max-width:1180px;margin:0 auto;padding:28px 20px 56px}
-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:34px}
+header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:34px}
 .logo{font:600 22px var(--serif);letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
 .logo i{width:22px;height:22px;border:2px solid var(--accent);border-right-width:7px;border-radius:3px;display:block}
 .hint{color:var(--mute);font-size:13px}
 h1{font:400 clamp(30px,4.4vw,46px)/1.08 var(--serif);letter-spacing:-.02em;margin:0 0 12px;max-width:15em}
 .lede{color:var(--mute);margin:0 0 12px;max-width:34em;font-size:16px}
-.scope{color:var(--mute);margin:0 0 24px;max-width:40em;font-size:14px}
+.live{text-align:right;position:relative;padding-top:2px}
+.scope{margin:2px 0 0}
 .scope summary{cursor:pointer;display:inline-flex;align-items:center;gap:6px;color:var(--accent);font-weight:600;font-size:13px;list-style:none;border-radius:6px}
 .scope summary::-webkit-details-marker{display:none}
 .scope summary::before{content:"";width:6px;height:6px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);transition:transform .15s}
 .scope[open] summary::before{transform:rotate(45deg)}
 .scope summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
-.scope p{margin:8px 0 0}
+.scope p{position:absolute;right:0;top:100%;z-index:5;margin:6px 0 0;width:min(320px,calc(100vw - 40px));text-align:left;background:var(--panel);color:var(--mute);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px;line-height:1.5;box-shadow:0 8px 24px rgba(16,24,40,.12)}
 @media(prefers-reduced-motion:reduce){.scope summary::before{transition:none}}
 .grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:28px;align-items:start}
 @media(max-width:900px){.grid{grid-template-columns:1fr}}
@@ -117,12 +118,12 @@ mark{background:var(--hl);color:var(--hl-ink);border-radius:3px;padding:0 2px}
 <div class="wrap">
   <header>
     <div class="logo"><i></i>{{BRAND}}</div>
-    <span class="hint" id="status"></span>
+    <div class="live"><div class="hint" id="status"></div>
+      <details class="scope" id="scopebox" hidden><summary>How is this counted?</summary><p id="scope"></p></details></div>
   </header>
 
   <h1>New research on your topic, in your inbox.</h1>
   <p class="lede">Choose your keywords and watch matching papers appear as you type. Subscribe when the results look right.</p>
-  <details class="scope" id="scopebox" hidden><summary>How is this counted?</summary><p id="scope"></p></details>
 
   <div class="grid">
     <section class="card" id="form-card" aria-label="Create an alert">
@@ -376,9 +377,11 @@ fetch(API+"/api/stats").then(r=>r.json()).then(j=>{
   const n=j.papers.toLocaleString(),since=j.since?new Date(j.since+"T00:00:00Z").toLocaleDateString("en-GB",{day:"numeric",month:"short",timeZone:"UTC"}):"";
   $("status").textContent="Live · "+n+" new papers"+(since?" since "+since:"");
   $("scope").textContent="We check OpenAlex, PubMed, arXiv and bioRxiv "+(j.every_hours===1?"every hour":"every "+j.every_hours+" hours")+(j.updated?" (last checked "+checkedAgo(j.updated)+")":"")+
-    " and keep the latest "+j.keep_days+" days. So far: "+n+" papers"+(since?" published since "+since:"")+", growing as we collect more. This is not the whole literature. Your alert watches for new papers from the moment you confirm it.";
+    " and keep the latest "+j.keep_days+" days, so this isn’t the whole literature. Your alert watches for new papers from the moment you confirm it.";
   $("scopebox").hidden=false;
 }).catch(()=>{$("status").textContent="Server not running"});
+document.addEventListener("click",e=>{const d=$("scopebox");if(d.open&&!d.contains(e.target))d.open=false});
+document.addEventListener("keydown",e=>{const d=$("scopebox");if(e.key==="Escape"&&d.open){d.open=false;d.querySelector("summary").focus()}});
 render();
 </script>
 </body>
