@@ -54,7 +54,7 @@ def _highlight(escaped, words):
 def _words(alert):
     out = set()
     for t in json.loads(alert["include"]):
-        out.update(w for w in re.findall(r"\w+", t) if len(w) > 2)
+        out.update(w for w in re.findall(r"\w+", t) if len(w) > 2 and w.lower() != "and")
     return out
 
 

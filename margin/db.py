@@ -193,13 +193,7 @@ def run_matching(conn, batch=1000) -> int:
 # ---------- live preview ----------
 
 def fts_query(spec: AlertSpec) -> str:
-    parts = []
-    for t in spec.include:
-        if t.phrase:
-            parts.append('"' + " ".join(t.toks) + '"')
-        else:
-            parts.append("(" + " AND ".join(f'"{x}"' for x in t.toks) + ")")
-    return " OR ".join(parts)
+    return " OR ".join(t.fts() for t in spec.include)
 
 
 def preview(conn, spec: AlertSpec, days=30, limit=50):
