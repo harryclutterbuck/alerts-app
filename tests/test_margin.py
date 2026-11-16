@@ -322,6 +322,33 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(count("CRISPR", exclude=["editing OR zzznotaword"]), count("CRISPR", exclude=["editing"]))
         self.assertEqual(self.client.post("/api/preview", json={"include": ["AND"]}).status_code, 400)
 
+    def test_confirmation_email_and_landing_page_are_branded(self):
+        self.subscribe(include=["(stroke OR <b>x</b>) AND rehab"], exclude=[], frequency="weekly")
+        mail = self.mailer.sent[-1]
+        self.assertIn("Confirm my alert", mail["html"])
+        self.assertIn("Button not working?", mail["html"])
+        self.assertNotIn("<b>x</b>", mail["html"])                          # the alert name is escaped
+        self.assertIn("&lt;b&gt;x&lt;/b&gt;", mail["html"])
+        self.assertIn("Monday", mail["html"])
+        self.assertIn("/confirm/", mail["text"])
+        r = self.confirm_last()
+        page = r.get_data(as_text=True)
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("You’re subscribed", page)
+        self.assertIn("Monday", page)
+        self.assertIn("&lt;b&gt;x&lt;/b&gt;", page)                          # escaped on the page too
+        self.assertIn("Instrument+Sans", page)                              # same fonts as the home page
+        bad = self.client.get("/confirm/not-a-real-token")
+        self.assertEqual(bad.status_code, 400)
+        self.assertIn("Create an alert", bad.get_data(as_text=True))
+
+    def test_when_wording_for_each_frequency(self):
+        from margin.digest import when_text
+        cfg = Config()
+        self.assertIn("shortly after", when_text(cfg, "instant"))
+        self.assertIn("each morning", when_text(cfg, "daily"))
+        self.assertIn("Monday", when_text(cfg, "weekly"))
+
     def test_and_or_alert_can_be_subscribed(self):
         self.subscribe(include=["(zzznotaword OR crispr) AND editing"], exclude=[])
         self.assertTrue(self.mailer.sent)
