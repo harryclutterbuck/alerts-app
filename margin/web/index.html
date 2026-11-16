@@ -29,8 +29,14 @@ header{display:flex;align-items:center;justify-content:space-between;margin-bott
 .hint{color:var(--mute);font-size:13px}
 h1{font:400 clamp(30px,4.4vw,46px)/1.08 var(--serif);letter-spacing:-.02em;margin:0 0 12px;max-width:15em}
 .lede{color:var(--mute);margin:0 0 12px;max-width:34em;font-size:16px}
-.scope{color:var(--mute);margin:0 0 28px;max-width:40em;font-size:14px}
-.scope:empty{margin:0 0 16px}
+.scope{color:var(--mute);margin:0 0 24px;max-width:40em;font-size:14px}
+.scope summary{cursor:pointer;display:inline-flex;align-items:center;gap:6px;color:var(--accent);font-weight:600;font-size:13px;list-style:none;border-radius:6px}
+.scope summary::-webkit-details-marker{display:none}
+.scope summary::before{content:"";width:6px;height:6px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);transition:transform .15s}
+.scope[open] summary::before{transform:rotate(45deg)}
+.scope summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.scope p{margin:8px 0 0}
+@media(prefers-reduced-motion:reduce){.scope summary::before{transition:none}}
 .grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:28px;align-items:start}
 @media(max-width:900px){.grid{grid-template-columns:1fr}}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px}
@@ -116,7 +122,7 @@ mark{background:var(--hl);color:var(--hl-ink);border-radius:3px;padding:0 2px}
 
   <h1>New research on your topic, in your inbox.</h1>
   <p class="lede">Choose your keywords and watch matching papers appear as you type. Subscribe when the results look right.</p>
-  <p class="scope" id="scope"></p>
+  <details class="scope" id="scopebox" hidden><summary>How is this counted?</summary><p id="scope"></p></details>
 
   <div class="grid">
     <section class="card" id="form-card" aria-label="Create an alert">
@@ -366,11 +372,12 @@ $("go").onclick=async()=>{
 $("again").onclick=()=>{$("done").hidden=true;$("form").hidden=false};
 const checkedAgo=iso=>{const m=Math.max(0,Math.round((Date.now()-new Date(iso))/60000));if(m<2)return"just now";if(m<90)return m+" minutes ago";const h=Math.round(m/60);return h<48?h+" hours ago":Math.round(h/24)+" days ago"};
 fetch(API+"/api/stats").then(r=>r.json()).then(j=>{
-  if(!j.papers){$("status").textContent="Live · collecting papers";$("scope").textContent="We are collecting the first batch of new papers now. Check back in a few minutes.";return}
+  if(!j.papers){$("status").textContent="Live · collecting papers";$("scope").textContent="We are collecting the first batch of new papers now. Check back in a few minutes.";$("scopebox").hidden=false;return}
   const n=j.papers.toLocaleString(),since=j.since?new Date(j.since+"T00:00:00Z").toLocaleDateString("en-GB",{day:"numeric",month:"short",timeZone:"UTC"}):"";
   $("status").textContent="Live · "+n+" new papers"+(since?" since "+since:"");
   $("scope").textContent="We check OpenAlex, PubMed, arXiv and bioRxiv "+(j.every_hours===1?"every hour":"every "+j.every_hours+" hours")+(j.updated?" (last checked "+checkedAgo(j.updated)+")":"")+
     " and keep the latest "+j.keep_days+" days. So far: "+n+" papers"+(since?" published since "+since:"")+", growing as we collect more. This is not the whole literature. Your alert watches for new papers from the moment you confirm it.";
+  $("scopebox").hidden=false;
 }).catch(()=>{$("status").textContent="Server not running"});
 render();
 </script>
