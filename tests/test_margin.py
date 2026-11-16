@@ -31,6 +31,36 @@ class MatcherTests(unittest.TestCase):
         self.assertFalse(hit(AlertSpec.build(1, ["crispr"], exclude=["review"]), p))
         self.assertTrue(hit(AlertSpec.build(1, ["\u201cbase editing\u201d"]), p))  # curly quotes
 
+    def test_and_or_and_brackets(self):
+        p = paper("Tumour immunotherapy in mice", "We study cancer and rehabilitation.")
+        h = lambda q, **kw: hit(AlertSpec.build(1, [q], **kw), p)
+        self.assertTrue(h("tumour AND immunotherapy"))
+        self.assertFalse(h("tumour AND zebrafish"))
+        self.assertTrue(h("zebrafish OR tumour"))
+        self.assertFalse(h("zebrafish OR newt"))
+        self.assertTrue(h("tumour and immunotherapy"))                    # any case
+        self.assertTrue(h("(zebrafish OR tumour) AND immunotherapy"))
+        self.assertFalse(h("(zebrafish OR newt) AND immunotherapy"))
+        self.assertTrue(h("zebrafish AND newt OR tumour"))                # AND binds tighter than OR
+        self.assertFalse(h("zebrafish AND (newt OR tumour)"))
+        self.assertTrue(h('"cancer and rehabilitation" OR zebrafish'))    # inside quotes they are ordinary words
+        self.assertTrue(h("tumour AND"))                                  # dangling and stray symbols are forgiven
+        self.assertTrue(h("OR tumour"))
+        self.assertTrue(h("((tumour"))
+        self.assertTrue(h("tumour))"))
+        self.assertTrue(h("tumour OR OR zebrafish"))
+        self.assertTrue(AlertSpec.build(1, ["AND", "OR", "( )"]).include == [])  # nothing searchable
+        self.assertFalse(h("tumour", exclude=["zebrafish OR immunotherapy"]))   # leave-out takes OR too
+        self.assertTrue(h("tumour", exclude=["zebrafish OR newt"]))
+        self.assertTrue(h("tumour", exclude=["zebrafish AND immunotherapy"]))
+
+    def test_or_term_is_indexed_under_every_branch_and_counted_once(self):
+        spec = AlertSpec.build(1, ["tumour OR cancer"])
+        self.assertEqual(len(Matcher([spec]).match(paper("Cancer and tumour", ""))), 1)
+        self.assertEqual(len(Matcher([spec]).match(paper("Only cancer here", ""))), 1)
+        self.assertEqual(len(Matcher([spec]).match(paper("Neither", ""))), 0)
+        self.assertEqual(Matcher([spec]).match(paper("Cancer and tumour", ""))[0][1], 3)   # one term, title hit
+
     def test_accents_and_case(self):
         self.assertTrue(hit(AlertSpec.build(1, ["Pérez"]), paper("Work by perez et al")))
 
@@ -275,6 +305,26 @@ class PipelineTests(unittest.TestCase):
         stats = run_ingest(self.conn, self.cfg, fetch_map={"openalex": two_then_refuse, "arxiv": lambda: iter([PAPERS[2]])})
         self.assertEqual((stats["openalex"]["new"], stats["arxiv"]["new"]), (1, 1))
         self.assertIn("openalex", stats["_errors"])
+
+    def test_preview_understands_and_or_and_brackets(self):
+        for p in PAPERS:
+            db.upsert_paper(self.conn, p)
+        self.conn.commit()
+        count = lambda q, **kw: self.client.post("/api/preview", json={"include": [q], **kw}).get_json()["count"]
+        crispr, editing = count("CRISPR"), count("editing")
+        self.assertGreater(crispr, 0)
+        self.assertEqual(count("CRISPR AND editing"), count("CRISPR editing"))
+        self.assertEqual(count("crispr OR zzznotaword"), crispr)
+        self.assertEqual(count("zzznotaword AND crispr"), 0)
+        self.assertEqual(count("CRISPR OR editing"), count("(CRISPR) OR (editing)"))
+        self.assertGreaterEqual(count("CRISPR OR editing"), max(crispr, editing))
+        self.assertEqual(count("(zzznotaword OR crispr) AND editing"), count("crispr AND editing"))
+        self.assertEqual(count("CRISPR", exclude=["editing OR zzznotaword"]), count("CRISPR", exclude=["editing"]))
+        self.assertEqual(self.client.post("/api/preview", json={"include": ["AND"]}).status_code, 400)
+
+    def test_and_or_alert_can_be_subscribed(self):
+        self.subscribe(include=["(zzznotaword OR crispr) AND editing"], exclude=[])
+        self.assertTrue(self.mailer.sent)
 
     def test_preview_says_when_a_broad_search_was_cut_short(self):
         self.conn.executemany("INSERT INTO papers(doi,source,source_id,title,abstract,authors,venue,published,url,is_oa,is_preprint,ingested_at) "
