@@ -123,9 +123,9 @@ mark{background:var(--hl);color:var(--hl-ink);border-radius:3px;padding:0 2px}
       <div id="form">
         <div class="field">
           <label for="inc">Topics to follow</label>
-          <p class="sub">Press Enter after each. Use quotes for an exact phrase.</p>
+          <p class="sub">Press Enter after each. Use quotes for an exact phrase, and AND / OR to combine words, for example <b>(cancer OR tumour) AND immunotherapy</b>. AND is applied before OR, so use brackets to be sure. Each topic you add is either/or.</p>
           <div class="box" id="incbox" data-for="inc"><input id="inc" placeholder="e.g. CRISPR base editing" autocomplete="off"></div>
-          <div class="try">Try: <button data-add="machine learning">machine learning</button><button data-add="biofeedback">biofeedback</button><button data-add="“gene therapy”">“gene therapy”</button></div>
+          <div class="try">Try: <button data-add="machine learning">machine learning</button><button data-add="biofeedback">biofeedback</button><button data-add="“gene therapy”">“gene therapy”</button><button data-add="(stroke OR concussion) AND rehabilitation">(stroke OR concussion) AND rehabilitation</button></div>
         </div>
         <div class="field">
           <label for="exc">Leave out</label>
@@ -319,7 +319,7 @@ function hl(text,words){
 function render(){
   meta();
   const out=$("out"),cnt=$("count");
-  const words=[...new Set(raw("inc").flatMap(t=>clean(t).split(/\s+/)).filter(w=>w.length>2))];
+  const words=[...new Set(raw("inc").flatMap(t=>clean(t).replace(/[()]/g," ").split(/\s+/)).filter(w=>w.length>2&&w!=="and"))];
   if(!data){cnt.textContent="";out.innerHTML='<div class="empty"><b>Your matches will appear here</b>Add a topic on the left, or tap one of the examples.</div>';return}
   if(data.offline){cnt.textContent="";out.innerHTML='<div class="empty"><b>Can’t reach the server</b>Start it with <code>python3 -m margin serve</code> and reload this page.</div>';return}
   if(data.error){cnt.textContent="";out.innerHTML='<div class="empty"><b>Something went wrong</b>'+esc(data.error)+'</div>';return}

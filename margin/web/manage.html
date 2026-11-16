@@ -289,7 +289,7 @@ function mountEditor(id){
   const D={include:[...a.include],exclude:[...a.exclude],sources:new Set(a.sources),oa:a.oa_only,pre:a.preprints,freq:a.frequency};
   host.hidden=false;
   host.innerHTML=
-   '<div class="field tight"><label>Topics to follow</label><p class="sub">Use quotes for an exact phrase.</p><div class="box" id="ei'+id+'"></div></div>'
+   '<div class="field tight"><label>Topics to follow</label><p class="sub">Use quotes for an exact phrase, and AND / OR to combine words, e.g. (cancer OR tumour) AND immunotherapy.</p><div class="box" id="ei'+id+'"></div></div>'
   +'<div class="field tight"><label>Leave out</label><p class="sub">Papers containing these terms are skipped.</p><div class="box" id="ee'+id+'"></div></div>'
   +'<div class="field tight"><span class="lab">Where to look</span><div class="opts" style="margin-top:6px">'
   +ALL.map(s=>'<label><input type="checkbox" data-s="'+s+'"'+(D.sources.has(s)?" checked":"")+'>'+SRC[s]+'</label>').join("")+'</div>'
