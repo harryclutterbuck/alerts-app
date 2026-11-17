@@ -70,11 +70,11 @@ def explain(code: int) -> str:
 
 
 def fetch(since: date, mailto: str, api_key: str = "", max_pages: int = 300, http=get):
-    """Bulk-list every new article/preprint with an abstract. A list request costs 1 credit and returns up to
+    """Bulk-list every new article, review (incl. systematic reviews and meta-analyses) and preprint with an abstract. A list request costs 1 credit and returns up to
     200 works, so even a busy day is a few hundred credits; `max_pages` is a safety cap on spend per run."""
     cursor = "*"
     for _ in range(max_pages):
-        params = {"filter": f"from_publication_date:{since.isoformat()},type:article|preprint,has_abstract:true",
+        params = {"filter": f"from_publication_date:{since.isoformat()},type:article|review|preprint,has_abstract:true",
                   "per-page": 200, "cursor": cursor, "select": SELECT, "mailto": mailto,
                   "sort": "publication_date:desc"}      # newest first, so hitting the page cap only drops the oldest
         if api_key:
