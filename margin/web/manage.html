@@ -309,7 +309,7 @@ function mountEditor(id){
   +PUB.map(s=>'<label><input type="checkbox" data-s="'+s+'"'+(D.sources.has(s)?" checked":"")+'>'+SRC[s]+'</label>').join("")+'</div></div>'
   +'<div class="grp"><span class="grplab">Preprints</span><div class="opts"><label style="grid-column:1/-1"><input type="checkbox" id="ep'+id+'"'+(D.pre?" checked":"")+'>Include preprints from all preprint servers</label></div>'
   +'<details class="tip"><summary>What’s a preprint?</summary><div class="tipbody"><p>A preprint is a study its authors share publicly before it has been peer-reviewed or published in a journal. It often appears months earlier, but nobody has checked it yet, so its findings can change. We label every preprint in your emails and results.</p>'
-  +'<p>Servers we check include arXiv, bioRxiv, medRxiv, SSRN, Research Square, PsyArXiv, Preprints.org, ChemRxiv and others.</p></div></details></div>'
+  +'<p>Servers we check include arXiv, bioRxiv, medRxiv, SSRN, Research Square, PsyArXiv, SportRxiv, Preprints.org, ChemRxiv and others.</p></div></details></div>'
   +'<div class="opts" style="margin-top:14px"><label><input type="checkbox" id="eo'+id+'"'+(D.oa?" checked":"")+'>Open access only</label></div></div>'
   +'<div class="field tight"><span class="lab">How often</span><div class="seg" style="margin-top:6px" role="group" aria-label="Frequency">'
   +["instant","daily","weekly"].map(f=>'<button type="button" data-f="'+f+'" aria-pressed="'+(D.freq===f)+'">'+f[0].toUpperCase()+f.slice(1)+'</button>').join("")+'</div></div>'
