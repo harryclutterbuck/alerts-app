@@ -134,7 +134,7 @@ def render(cfg: Config, sub, groups):
             authors = json.loads(p["authors"])
             by = ", ".join(authors[:3]) + (" et al." if len(authors) > 3 else "")
             tags = " · ".join(x for x in [p["venue"], p["published"], "Open access" if p["is_oa"] else "",
-                                          "Preprint" if p["is_preprint"] else ""] if x)
+                                          "Preprint (not peer reviewed)" if p["is_preprint"] else ""] if x)
             up = f"{cfg.base_url}/f/{link(cfg, 'fb', a=a['id'], p=p['id'], v='up')}"
             down = f"{cfg.base_url}/f/{link(cfg, 'fb', a=a['id'], p=p['id'], v='down')}"
             h.append(
