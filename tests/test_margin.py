@@ -10,7 +10,7 @@ from margin.config import Config
 from margin.demo_data import PAPERS
 from margin.mailer import ConsoleMailer
 from margin.matcher import AlertSpec, Matcher
-from margin.sources import arxiv, openalex, pubmed
+from margin.sources import arxiv, europepmc, openalex, pubmed
 
 
 def paper(title, abstract="", source="openalex", oa=False, pre=False):
@@ -441,12 +441,81 @@ class PipelineTests(unittest.TestCase):
             return lambda since, *a, **k: (seen.__setitem__(name, since), iter([]))[1]
         today = db.now_dt().date()
         with mock.patch("margin.ingest.openalex.fetch", rec("openalex")), mock.patch("margin.ingest.arxiv.fetch", rec("arxiv")), \
-             mock.patch("margin.ingest.pubmed.fetch", rec("pubmed")):
+             mock.patch("margin.ingest.pubmed.fetch", rec("pubmed")), mock.patch("margin.ingest.europepmc.fetch", rec("europepmc")):
             run_ingest(self.conn, self.cfg)
             self.assertEqual({k: (today - v).days for k, v in seen.items()}, LOOKBACK_DAYS)
             run_ingest(self.conn, self.cfg, days=5)                      # an explicit window applies to all
             self.assertEqual({(today - v).days for v in seen.values()}, {5})
         self.assertLess(LOOKBACK_DAYS["pubmed"] * 7000, 10000)          # a PubMed window must stay under its 10,000 cap
+
+    def test_openalex_asks_for_reviews_too(self):
+        seen = []
+        def grab(url, params=None, **k):
+            seen.append(params["filter"])
+            return json.dumps({"results": [], "meta": {"next_cursor": None}}).encode()
+        list(openalex.fetch(date(2026, 11, 1), "a@b.c", http=grab))
+        self.assertIn("type:article|review|preprint", seen[0])
+        self.assertIn("has_abstract:true", seen[0])
+
+    def test_europepmc_parsing_paging_and_sources(self):
+        rec = lambda i, **kw: {"id": f"PPR{i}", "source": "PPR", "doi": f"10.1234/x{i}", "title": f"Preprint {i}",
+                               "abstractText": "<h4>Background</h4><p>Gait &amp; balance after <i>stroke</i>.</p>",
+                               "authorString": "Smith J, Doe A.", "firstPublicationDate": "2026-11-15", "isOpenAccess": "Y",
+                               "bookOrReportDetails": {"publisher": "Research Square"}, **kw}
+        pages = [{"resultList": {"result": [rec(1), rec(2, doi="10.1101/2026.11.01.555"), rec(3, doi="10.48550/arXiv.2611.0001"),
+                                            rec(4, abstractText=""), rec(5, title="")]}, "nextCursorMark": "AAA"},
+                 {"resultList": {"result": [rec(6, doi=None)]}, "nextCursorMark": "AAA"}]      # same cursor back = the end
+        calls, it = [], iter(pages)
+        def http(url, params):
+            calls.append(params)
+            return json.dumps(next(it)).encode()
+        got = list(europepmc.fetch(date(2026, 11, 14), http=http))
+        self.assertEqual([p["source_id"] for p in got], ["PPR1", "PPR2", "PPR3", "PPR6"])   # no abstract / no title skipped
+        self.assertEqual([p["source"] for p in got], ["europepmc", "biorxiv", "arxiv", "europepmc"])
+        self.assertEqual(got[0]["abstract"], "Background Gait & balance after stroke.")
+        self.assertEqual(europepmc.clean("H<sub>2</sub>O and <b>CO</b><sub>2</sub>"), "H2O and CO2")
+        self.assertEqual(got[0]["authors"], ["Smith J", "Doe A"])
+        self.assertTrue(got[0]["is_preprint"] and got[0]["is_oa"])
+        self.assertEqual(got[0]["url"], "https://doi.org/10.1234/x1")
+        self.assertEqual(got[3]["url"], "https://europepmc.org/article/PPR/PPR6")
+        self.assertIn("SRC:PPR", calls[0]["query"])
+        self.assertIn("FIRST_PDATE:[2026-11-14 TO", calls[0]["query"])
+        self.assertEqual((calls[0]["cursorMark"], calls[1]["cursorMark"], calls[0]["resultType"]), ("*", "AAA", "core"))
+        self.assertEqual(list(europepmc.fetch(date(2026, 11, 14), http=lambda *a, **k: b'{"hitCount":0}')), [])
+
+    def test_europepmc_preprint_merges_with_the_openalex_copy(self):
+        oa = dict(PAPERS[1], source="biorxiv", source_id="W9", doi="10.1101/2026.11.01.555", abstract="short")
+        ep = dict(PAPERS[1], source="biorxiv", source_id="PPR2", doi="10.1101/2026.11.01.555")
+        id1, new1 = db.upsert_paper(self.conn, oa)
+        id2, new2 = db.upsert_paper(self.conn, ep)
+        self.assertEqual((id1, new1, new2), (id2, True, False))
+
+    def test_other_preprints_is_a_valid_source_and_existing_alerts_are_migrated(self):
+        self.assertEqual(self.client.post("/api/preview", json={"include": ["crispr"], "sources": ["europepmc"]}).status_code, 200)
+        self.assertEqual(self.client.post("/api/preview", json={"include": ["crispr"], "sources": ["nonsense"]}).status_code, 400)
+        old = ["openalex", "pubmed", "arxiv", "biorxiv"]
+        mk = lambda name, srcs: self.conn.execute(
+            "INSERT INTO subscribers(email,created_at) VALUES(?,?)", (name, db.now_iso())).lastrowid
+        sid = mk("m@x.co", None)
+        ins = lambda srcs: self.conn.execute(
+            "INSERT INTO alerts(subscriber_id,name,include,exclude,sources,oa_only,preprints,frequency,status,created_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?)", (sid, "a", '["x"]', "[]", json.dumps(srcs), 0, 1, "daily", "active", db.now_iso())).lastrowid
+        everything, narrowed = ins(sorted(old)), ins(["pubmed"])
+        self.conn.execute("DELETE FROM state WHERE key='migrated_europepmc_source'")
+        self.conn.commit()
+        db._migrate(self.conn)
+        get = lambda i: json.loads(self.conn.execute("SELECT sources FROM alerts WHERE id=?", (i,)).fetchone()[0])
+        self.assertEqual(get(everything), sorted(old + ["europepmc"]))       # watched everything -> now includes the new source
+        self.assertEqual(get(narrowed), ["pubmed"])                          # someone's own choice is left alone
+        later = ins(sorted(old))
+        db._migrate(self.conn)                                               # runs once only
+        self.assertEqual(get(later), sorted(old))
+
+    def test_other_preprints_reach_alerts_that_watch_it(self):
+        pre = dict(PAPERS[1], source="europepmc", source_id="PPR1", doi="10.31234/osf.io/abc", is_preprint=True)
+        self.assertTrue(hit(AlertSpec.build(1, [pre["title"].split()[0]], sources=["europepmc"]), pre))
+        self.assertFalse(hit(AlertSpec.build(1, [pre["title"].split()[0]], sources=["pubmed"]), pre))
+        self.assertFalse(hit(AlertSpec.build(1, [pre["title"].split()[0]], sources=["europepmc"], preprints=False), pre))
 
     def test_worker_tick_timers(self):
         from dataclasses import replace
@@ -514,6 +583,43 @@ class PipelineTests(unittest.TestCase):
         self.client.get("/f/" + tokens.sign({"t": "fb", "a": 1, "p": pid, "v": "up"}, "s3cret"))
         s = rank.feedback_stats(self.conn)[0]
         self.assertEqual((s["sent"], s["up"], s["down"], s["relevant_rate"], s["response_rate"]), (1, 1, 0, 1.0, 1.0))
+
+    def test_header_can_differ_from_the_product_name(self):
+        from dataclasses import replace
+        cfg = replace(self.cfg, brand="In The Margin", header="The Margin", operator="Op", contact_email="hi@x.org")
+        mailer = ConsoleMailer(cfg)
+        c = create_app(cfg, mailer).test_client()
+        home, manage, privacy = (c.get(p).data.decode() for p in ("/", "/manage", "/privacy"))
+        self.assertIn('<div class="logo"><i></i>The Margin</div>', home)
+        self.assertIn('<i></i>The Margin</a>', manage)
+        self.assertIn("← The Margin", privacy)
+        self.assertIn("<title>In The Margin – research alerts</title>", home)           # the product name is unchanged elsewhere
+        self.assertIn("In The Margin is run by Op", privacy)
+        self.assertIn("In The Margin", c.get("/confirm/bad").data.decode())             # simple pages: title/product name kept...
+        self.assertIn("<i></i>The Margin</a>", c.get("/confirm/bad").data.decode())     # ...logo uses the header
+        c.post("/api/subscribe", json={"email": "a@b.co", "alert": {"include": ["x"], "exclude": [], "frequency": "weekly"}})
+        self.assertIn("In The Margin", mailer.sent[-1]["subject"])
+        plain = create_app(replace(self.cfg, brand="Plain"), ConsoleMailer(self.cfg)).test_client().get("/").data.decode()
+        self.assertIn('<div class="logo"><i></i>Plain</div>', plain)                    # no header set: the brand is used
+
+    def test_search_tips_are_tucked_away_and_signup_hints_at_junk_folder(self):
+        home = self.client.get("/").data.decode()
+        self.assertIn('<details class="tip"><summary>Search tips</summary>', home)
+        self.assertIn("AND is applied before OR", home)
+        self.assertIn("Press Enter after each topic.", home)
+        self.assertIn("junk or spam folder", home)
+        from email.utils import parseaddr
+        self.assertIn(parseaddr(self.cfg.from_addr)[1], home.split("junk or spam folder")[1][:200])
+
+    def test_emails_carry_reply_to_and_a_message_id_on_our_own_domain(self):
+        from dataclasses import replace
+        from margin.mailer import build_message
+        cfg = replace(self.cfg, brand="In The Margin", from_addr="In The Margin <alerts@inthemargin.uk>", contact_email="hello@inthemargin.uk")
+        m = build_message(cfg, "a@b.co", "Hi", "<p>x</p>", "x")
+        self.assertTrue(m["Message-ID"].endswith("@inthemargin.uk>"))
+        self.assertEqual(m["Reply-To"], "In The Margin <hello@inthemargin.uk>")
+        m2 = build_message(replace(cfg, contact_email="you@example.com"), "a@b.co", "Hi", "<p>x</p>", "x")
+        self.assertIsNone(m2["Reply-To"])                                                # placeholder address: don't advertise it
 
     def test_brand_is_one_setting_everywhere_subscribers_look(self):
         import re
