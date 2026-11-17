@@ -517,6 +517,24 @@ class PipelineTests(unittest.TestCase):
         self.assertFalse(hit(AlertSpec.build(1, [pre["title"].split()[0]], sources=["pubmed"]), pre))
         self.assertFalse(hit(AlertSpec.build(1, [pre["title"].split()[0]], sources=["europepmc"], preprints=False), pre))
 
+    def test_late_arrivals_are_counted_and_the_first_run_is_a_baseline(self):
+        from margin.ingest import run_ingest, LOOKBACK_DAYS
+        self.assertEqual(LOOKBACK_DAYS["openalex"], 7)
+        today = db.now_dt().date()
+        mk = lambda i, age: dict(PAPERS[0], source="openalex", source_id=f"late{i}", doi=f"10.9/late{i}",
+                                 title=f"Late test {i}", published=(today - timedelta(days=age)).isoformat())
+        batch = lambda ids: {"openalex": lambda: iter([mk(i, a) for i, a in ids])}
+        s1 = run_ingest(self.conn, self.cfg, fetch_map=batch([(1, 0), (2, 5), (3, 6)]))
+        self.assertEqual((s1["openalex"]["new"], s1["openalex"]["late"]), (3, 2))     # papers older than 3 days when first seen
+        self.assertIsNone(db.get_state(self.conn, "late_openalex_late_total"))         # first run is a baseline: not counted
+        s2 = run_ingest(self.conn, self.cfg, fetch_map=batch([(1, 0), (4, 1), (5, 4), (6, 3)]))   # 1 already known
+        self.assertEqual((s2["openalex"]["new"], s2["openalex"]["late"]), (3, 1))     # age 4 is late, age 3 is not
+        self.assertEqual((db.get_state(self.conn, "late_openalex_new_total"), db.get_state(self.conn, "late_openalex_late_total")), ("3", "1"))
+        s3 = run_ingest(self.conn, self.cfg, fetch_map={"pubmed": lambda: iter([dict(PAPERS[0], source_id="pm9", doi="10.9/pm9", published="2020-01-01")])})
+        self.assertNotIn("late", s3["pubmed"])                                        # only OpenAlex is measured
+        bad = run_ingest(self.conn, self.cfg, fetch_map={"openalex": lambda: iter([dict(mk(9, 0), published="not-a-date")])})
+        self.assertEqual(bad["openalex"]["late"], 0)                                  # an odd date never breaks the run
+
     def test_worker_tick_timers(self):
         from dataclasses import replace
         from margin import worker
@@ -608,7 +626,7 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("Published papers", home)                                   # sources are grouped, with one preprint switch
         self.assertIn("Include preprints from all preprint servers", home)
         self.assertIn("What’s a preprint?", home)
-        for server in ("arXiv", "bioRxiv", "medRxiv", "SSRN", "Research Square", "PsyArXiv"):
+        for server in ("arXiv", "bioRxiv", "medRxiv", "SSRN", "Research Square", "PsyArXiv", "SportRxiv"):
             self.assertIn(server, home)
         self.assertNotIn("Other preprints", home)
         self.assertNotIn('value="arXiv"', home)                                   # no per-server preprint tick boxes any more
