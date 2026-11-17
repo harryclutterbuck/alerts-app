@@ -24,7 +24,7 @@ html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
 .wrap{max-width:1180px;margin:0 auto;padding:28px 20px 56px}
 header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:34px}
-.logo{font:600 22px var(--serif);letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
+.logo{white-space:nowrap;flex-shrink:0;font:600 22px var(--serif);letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
 .logo i{width:22px;height:22px;border:2px solid var(--accent);border-right-width:7px;border-radius:3px;display:block}
 .hint{color:var(--mute);font-size:13px}
 h1{font:400 clamp(30px,4.4vw,46px)/1.08 var(--serif);letter-spacing:-.02em;margin:0 0 12px;max-width:15em}
@@ -44,6 +44,15 @@ h1{font:400 clamp(30px,4.4vw,46px)/1.08 var(--serif);letter-spacing:-.02em;margi
 .field{margin-bottom:22px}
 .field>label,.field>.lab{display:block;font-weight:600;margin-bottom:3px}
 .sub{color:var(--mute);font-size:13px;margin:0 0 9px}
+.tip{margin:0 0 10px;font-size:13px}
+.tip summary{cursor:pointer;display:inline-flex;align-items:center;gap:6px;color:var(--accent);font-weight:600;list-style:none;border-radius:6px}
+.tip summary::-webkit-details-marker{display:none}
+.tip summary::before{content:"";width:6px;height:6px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);transition:transform .15s}
+.tip[open] summary::before{transform:rotate(45deg)}
+.tip summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.tipbody{margin:8px 0 2px;padding:11px 14px;background:var(--soft);border-radius:10px;color:var(--ink);line-height:1.55}
+.tipbody ul{margin:0;padding-left:18px}.tipbody li{margin:3px 0}
+@media(prefers-reduced-motion:reduce){.tip summary::before{transition:none}}
 .box{display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);cursor:text}
 .box:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
 .box input{flex:1;min-width:130px;border:0;background:transparent;font:inherit;color:var(--ink);padding:5px 4px;outline:none}
@@ -117,7 +126,7 @@ mark{background:var(--hl);color:var(--hl-ink);border-radius:3px;padding:0 2px}
 <body>
 <div class="wrap">
   <header>
-    <div class="logo"><i></i>{{BRAND}}</div>
+    <div class="logo"><i></i>{{HEADER}}</div>
     <div class="live"><div class="hint" id="status"></div>
       <details class="scope" id="scopebox" hidden><summary>How is this counted?</summary><p id="scope"></p></details></div>
   </header>
@@ -130,7 +139,14 @@ mark{background:var(--hl);color:var(--hl-ink);border-radius:3px;padding:0 2px}
       <div id="form">
         <div class="field">
           <label for="inc">Topics to follow</label>
-          <p class="sub">Press Enter after each. Use quotes for an exact phrase, and AND / OR to combine words, for example <b>(cancer OR tumour) AND immunotherapy</b>. AND is applied before OR, so use brackets to be sure. Each topic you add is either/or.</p>
+          <p class="sub" style="margin-bottom:3px">Press Enter after each topic.</p>
+          <details class="tip"><summary>Search tips</summary><div class="tipbody"><ul>
+            <li><b>Exact phrase:</b> use quotes, like <b>“base editing”</b>.</li>
+            <li><b>Either word:</b> <b>cancer OR tumour</b>.</li>
+            <li><b>Both words:</b> <b>cancer AND immunotherapy</b>, or just put a space between them.</li>
+            <li><b>Grouping:</b> <b>(cancer OR tumour) AND immunotherapy</b>. AND is applied before OR, so use brackets to be sure.</li>
+            <li>Each topic you add is either/or: you get papers matching any of them.</li>
+          </ul></div></details>
           <div class="box" id="incbox" data-for="inc"><input id="inc" placeholder="e.g. CRISPR base editing" autocomplete="off"></div>
           <div class="try">Try: <button data-add="machine learning">machine learning</button><button data-add="biofeedback">biofeedback</button><button data-add="“gene therapy”">“gene therapy”</button><button data-add="(stroke OR concussion) AND rehabilitation">(stroke OR concussion) AND rehabilitation</button></div>
         </div>
@@ -147,6 +163,7 @@ mark{background:var(--hl);color:var(--hl-ink);border-radius:3px;padding:0 2px}
             <label><input type="checkbox" value="PubMed" checked>PubMed</label>
             <label><input type="checkbox" value="arXiv" checked>arXiv</label>
             <label><input type="checkbox" value="bioRxiv" checked>bioRxiv</label>
+            <label title="Preprints from SSRN, Research Square, PsyArXiv, SportRxiv and other servers, via Europe PMC"><input type="checkbox" value="europepmc" checked>Other preprints</label>
           </div>
           <div class="opts" style="margin-top:12px">
             <label><input type="checkbox" id="oa">Open access only</label>
@@ -174,7 +191,7 @@ mark{background:var(--hl);color:var(--hl-ink);border-radius:3px;padding:0 2px}
       <div class="done" id="done" hidden>
         <div class="tick">✓</div>
         <h2>Check your inbox</h2>
-        <p id="donemsg"></p><p id="devhint" class="fine" hidden></p>
+        <p id="donemsg"></p><p class="fine">Not there after a minute? Check your junk or spam folder. If it’s there, mark it “not junk” and add {{FROM_ADDR}} to your contacts, so future alerts reach your inbox.</p><p id="devhint" class="fine" hidden></p>
         <button class="link" id="again">Create another alert</button>
       </div>
     </section>
@@ -196,7 +213,7 @@ mark{background:var(--hl);color:var(--hl-ink);border-radius:3px;padding:0 2px}
 <script>
 // When served by the backend this is "" (same origin). When the file is opened directly, talk to the local server.
 const API=location.protocol==="file:"?"http://127.0.0.1:5000":"";
-const SRC={openalex:"OpenAlex",pubmed:"PubMed",arxiv:"arXiv",biorxiv:"bioRxiv"};
+const SRC={openalex:"OpenAlex",pubmed:"PubMed",arxiv:"arXiv",biorxiv:"bioRxiv",europepmc:"Other preprints"};
 const S={inc:[],exc:[],freq:"Weekly",view:"list"};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -205,7 +222,7 @@ const rx=t=>t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
 const ago=d=>{const n=Math.round((new Date(new Date().toDateString())-new Date(d+"T00:00:00"))/864e5);return n<=0?"Today":n===1?"Yesterday":n+" days ago"};
 const snip=(t,n=320)=>{t=(t||"").replace(/\s+/g," ").trim();return t.length<=n?t:t.slice(0,n).replace(/\s+\S*$/,"")+"…"};
 
-const FULL=["openalex","pubmed","arxiv","biorxiv"];
+const FULL=["openalex","pubmed","arxiv","biorxiv","europepmc"];
 const n=d=>d.count.toLocaleString()+(d.capped?"+":"");
 const list=(a,w)=>a.length<2?a.join(""):a.slice(0,-1).join(", ")+" "+w+" "+a[a.length-1];
 const q=t=>"“"+t.replace(/[“”"]/g,"").trim()+"”";
@@ -274,10 +291,10 @@ async function fetchPreview(){
   render();
 }
 
-// Filters that can never match anything (arXiv and bioRxiv only hold preprints).
+// Filters that can never match anything (arXiv, bioRxiv and Other preprints only hold preprints).
 function conflict(){
   const s=sources();
-  if(!$("pre").checked&&s.length&&s.every(x=>x==="arxiv"||x==="biorxiv"))
+  if(!$("pre").checked&&s.length&&s.every(x=>x==="arxiv"||x==="biorxiv"||x==="europepmc"))
     return "Preprints are switched off, but "+list(s.map(x=>SRC[x]),"and")+(s.length>1?" contain":" contains")+" only preprints, so this alert could never match anything.";
   return null;
 }
@@ -376,7 +393,7 @@ fetch(API+"/api/stats").then(r=>r.json()).then(j=>{
   if(!j.papers){$("status").textContent="Live · collecting papers";$("scope").textContent="We are collecting the first batch of new papers now. Check back in a few minutes.";$("scopebox").hidden=false;return}
   const n=j.papers.toLocaleString(),since=j.since?new Date(j.since+"T00:00:00Z").toLocaleDateString("en-GB",{day:"numeric",month:"short",timeZone:"UTC"}):"";
   $("status").textContent="Live · "+n+" new papers"+(since?" since "+since:"");
-  $("scope").textContent="We check OpenAlex, PubMed, arXiv and bioRxiv "+(j.every_hours===1?"every hour":"every "+j.every_hours+" hours")+(j.updated?" (last checked "+checkedAgo(j.updated)+")":"")+
+  $("scope").textContent="We check OpenAlex, PubMed, Europe PMC and arXiv "+(j.every_hours===1?"every hour":"every "+j.every_hours+" hours")+(j.updated?" (last checked "+checkedAgo(j.updated)+")":"")+
     " and keep the latest "+j.keep_days+" days, so this isn’t the whole literature. Your alert watches for new papers from the moment you confirm it.";
   $("scopebox").hidden=false;
 }).catch(()=>{$("status").textContent="Server not running"});

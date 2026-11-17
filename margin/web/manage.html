@@ -144,14 +144,14 @@ h1{font-size:clamp(28px,4vw,38px);margin:0}
 </head>
 <body>
 <div class="wrap">
-  <header><a class="logo" href="/"><i></i>{{BRAND}}</a><span class="hint" id="hint"></span></header>
+  <header><a class="logo" href="/"><i></i>{{HEADER}}</a><span class="hint" id="hint"></span></header>
   <main id="app" aria-live="polite"><div class="center"><p>Loading your alerts…</p></div></main>
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
 <script>
 const API=location.protocol==="file:"?"http://127.0.0.1:5000":"";
 const TOKEN=new URLSearchParams(location.search).get("t")||"";
-const SRC={openalex:"OpenAlex",pubmed:"PubMed",arxiv:"arXiv",biorxiv:"bioRxiv"};
+const SRC={openalex:"OpenAlex",pubmed:"PubMed",arxiv:"arXiv",biorxiv:"bioRxiv",europepmc:"Other preprints"};
 const ALL=Object.keys(SRC);
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -306,7 +306,7 @@ function mountEditor(id){
   const conflictMsg=()=>{
     const s=[...D.sources];
     if(!s.length)return"Tick at least one source.";
-    if(!D.pre&&s.every(x=>x==="arxiv"||x==="biorxiv"))return"Preprints are switched off, but "+list(s.map(x=>SRC[x]),"and")+(s.length>1?" contain":" contains")+" only preprints, so this alert could never match anything.";
+    if(!D.pre&&s.every(x=>x==="arxiv"||x==="biorxiv"||x==="europepmc"))return"Preprints are switched off, but "+list(s.map(x=>SRC[x]),"and")+(s.length>1?" contain":" contains")+" only preprints, so this alert could never match anything.";
     return null;
   };
   function changed(){
