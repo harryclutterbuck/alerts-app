@@ -37,6 +37,17 @@ h1{font:400 clamp(30px,4.4vw,46px)/1.08 var(--serif);letter-spacing:-.02em;margi
 .field{margin-bottom:22px}
 .field>label,.field>.lab{display:block;font-weight:600;margin-bottom:3px}
 .sub{color:var(--mute);font-size:13px;margin:0 0 9px}
+.tip{margin:8px 0 0;font-size:13px}
+.tip summary{cursor:pointer;display:inline-flex;align-items:center;gap:6px;color:var(--accent);font-weight:600;list-style:none;border-radius:6px}
+.tip summary::-webkit-details-marker{display:none}
+.tip summary::before{content:"";width:6px;height:6px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);transition:transform .15s}
+.tip[open] summary::before{transform:rotate(45deg)}
+.tip summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.tipbody{margin:8px 0 2px;padding:11px 14px;background:var(--soft);border-radius:10px;color:var(--ink);line-height:1.55}
+.tipbody p{margin:0 0 8px}.tipbody p:last-child{margin:0}
+.grp{margin-top:10px}
+.grplab{display:block;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--mute);margin-bottom:6px}
+@media(prefers-reduced-motion:reduce){.tip summary::before{transition:none}}
 .box{display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);cursor:text}
 .box:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
 .box input{flex:1;min-width:130px;border:0;background:transparent;font:inherit;color:var(--ink);padding:5px 4px;outline:none}
@@ -151,8 +162,8 @@ h1{font-size:clamp(28px,4vw,38px);margin:0}
 <script>
 const API=location.protocol==="file:"?"http://127.0.0.1:5000":"";
 const TOKEN=new URLSearchParams(location.search).get("t")||"";
-const SRC={openalex:"OpenAlex",pubmed:"PubMed",arxiv:"arXiv",biorxiv:"bioRxiv",europepmc:"Other preprints"};
-const ALL=Object.keys(SRC);
+const SRC={openalex:"OpenAlex",pubmed:"PubMed",arxiv:"arXiv",biorxiv:"bioRxiv",europepmc:"Europe PMC"};
+const PUB=["openalex","pubmed"],PRE=["arxiv","biorxiv","europepmc"];   // one switch controls every preprint server
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const q=t=>"“"+t.replace(/[“”"]/g,"").trim()+"”";
@@ -172,7 +183,8 @@ function toast(m){const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout
 
 function summary(a){
   const f=a.frequency==="instant"?"Instant":a.frequency==="daily"?"Daily":"Weekly";
-  let t=f+" · "+(a.sources.length===ALL.length?"all sources":list(a.sources.map(x=>SRC[x]),"and"));
+  const pubs=PUB.filter(x=>a.sources.includes(x)),pre=a.preprints&&PRE.some(x=>a.sources.includes(x));
+  let t=f+" · "+(pubs.length===PUB.length&&pre?"all sources":list([...pubs.map(x=>SRC[x]),...(pre?["preprint servers"]:[])],"and")||"no sources");
   if(a.exclude.length)t+=" · leaving out "+list(a.exclude.map(q),"and");
   if(a.oa_only)t+=" · open access only";
   if(!a.preprints)t+=" · no preprints";
@@ -286,15 +298,19 @@ function tagInput(host,arr,placeholder,kind,onchange){
 
 function mountEditor(id){
   const a=STATE.alerts.find(x=>x.id===id),host=$("ed"+id);if(!a||!host)return;
-  const D={include:[...a.include],exclude:[...a.exclude],sources:new Set(a.sources),oa:a.oa_only,pre:a.preprints,freq:a.frequency};
+  const D={include:[...a.include],exclude:[...a.exclude],sources:new Set(PUB.filter(x=>a.sources.includes(x))),oa:a.oa_only,pre:a.preprints&&PRE.some(x=>a.sources.includes(x)),freq:a.frequency};
+  const outSources=()=>[...D.sources,...PRE];   // preprint servers are always listed; the preprints switch decides whether they count
   host.hidden=false;
   host.innerHTML=
    '<div class="field tight"><label>Topics to follow</label><p class="sub">Use quotes for an exact phrase, and AND / OR to combine words, e.g. (cancer OR tumour) AND immunotherapy.</p><div class="box" id="ei'+id+'"></div></div>'
   +'<div class="field tight"><label>Leave out</label><p class="sub">Papers containing these terms are skipped.</p><div class="box" id="ee'+id+'"></div></div>'
-  +'<div class="field tight"><span class="lab">Where to look</span><div class="opts" style="margin-top:6px">'
-  +ALL.map(s=>'<label><input type="checkbox" data-s="'+s+'"'+(D.sources.has(s)?" checked":"")+'>'+SRC[s]+'</label>').join("")+'</div>'
-  +'<div class="opts" style="margin-top:12px"><label><input type="checkbox" id="eo'+id+'"'+(D.oa?" checked":"")+'>Open access only</label>'
-  +'<label><input type="checkbox" id="ep'+id+'"'+(D.pre?" checked":"")+'>Include preprints</label></div></div>'
+  +'<div class="field tight"><span class="lab">Where to look</span>'
+  +'<div class="grp"><span class="grplab">Published papers</span><div class="opts">'
+  +PUB.map(s=>'<label><input type="checkbox" data-s="'+s+'"'+(D.sources.has(s)?" checked":"")+'>'+SRC[s]+'</label>').join("")+'</div></div>'
+  +'<div class="grp"><span class="grplab">Preprints</span><div class="opts"><label style="grid-column:1/-1"><input type="checkbox" id="ep'+id+'"'+(D.pre?" checked":"")+'>Include preprints from all preprint servers</label></div>'
+  +'<details class="tip"><summary>What’s a preprint?</summary><div class="tipbody"><p>A preprint is a study its authors share publicly before it has been peer-reviewed or published in a journal. It often appears months earlier, but nobody has checked it yet, so its findings can change. We label every preprint in your emails and results.</p>'
+  +'<p>Servers we check include arXiv, bioRxiv, medRxiv, SSRN, Research Square, PsyArXiv, Preprints.org, ChemRxiv and others.</p></div></details></div>'
+  +'<div class="opts" style="margin-top:14px"><label><input type="checkbox" id="eo'+id+'"'+(D.oa?" checked":"")+'>Open access only</label></div></div>'
   +'<div class="field tight"><span class="lab">How often</span><div class="seg" style="margin-top:6px" role="group" aria-label="Frequency">'
   +["instant","daily","weekly"].map(f=>'<button type="button" data-f="'+f+'" aria-pressed="'+(D.freq===f)+'">'+f[0].toUpperCase()+f.slice(1)+'</button>').join("")+'</div></div>'
   +'<div class="pv" id="pv'+id+'"></div><div class="err" id="er'+id+'" role="alert"></div>'
@@ -304,9 +320,7 @@ function mountEditor(id){
   const ti=tagInput($("ei"+id),D.include,"Add a topic","inc",changed);
   const te=tagInput($("ee"+id),D.exclude,"Add a term to skip","exc",changed);
   const conflictMsg=()=>{
-    const s=[...D.sources];
-    if(!s.length)return"Tick at least one source.";
-    if(!D.pre&&s.every(x=>x==="arxiv"||x==="biorxiv"||x==="europepmc"))return"Preprints are switched off, but "+list(s.map(x=>SRC[x]),"and")+(s.length>1?" contain":" contains")+" only preprints, so this alert could never match anything.";
+    if(!D.sources.size&&!D.pre)return"Nothing is selected to search. Tick a published-papers source or include preprints.";
     return null;
   };
   function changed(){
@@ -318,7 +332,7 @@ function mountEditor(id){
       const my=++seq;
       try{
         const r=await fetch(API+"/api/preview",{method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({include:inc,exclude:te.pending(),sources:[...D.sources],oa_only:D.oa,preprints:D.pre})});
+          body:JSON.stringify({include:inc,exclude:te.pending(),sources:outSources(),oa_only:D.oa,preprints:D.pre})});
         const j=await r.json();if(my!==seq)return;
         $("pv"+id).innerHTML=r.ok?'With these settings, <b>'+j.count.toLocaleString()+(j.capped?'+':'')+'</b> '+(j.count===1?"paper":"papers")+' matched in the last 30 days.':"";
       }catch(e){}
@@ -334,7 +348,7 @@ function mountEditor(id){
     if(!inc.length){$("er"+id).textContent="Add at least one topic to follow.";return}
     if(c){$("er"+id).textContent=c;return}
     const btn=$("sv"+id);btn.disabled=true;btn.textContent="Saving…";
-    const r=await call("PATCH","/api/manage/alerts/"+id,{include:inc,exclude:exc,sources:[...D.sources],oa_only:D.oa,preprints:D.pre,frequency:D.freq});
+    const r=await call("PATCH","/api/manage/alerts/"+id,{include:inc,exclude:exc,sources:outSources(),oa_only:D.oa,preprints:D.pre,frequency:D.freq});
     if(!r.ok){$("er"+id).textContent=r.j?.error||"Couldn’t save. Please try again.";btn.disabled=false;btn.textContent="Save changes";return}
     Object.assign(a,r.j);EDIT=null;render();toast("Changes saved.");
   };

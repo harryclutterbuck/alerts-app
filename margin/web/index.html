@@ -52,6 +52,9 @@ h1{font:400 clamp(30px,4.4vw,46px)/1.08 var(--serif);letter-spacing:-.02em;margi
 .tip summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .tipbody{margin:8px 0 2px;padding:11px 14px;background:var(--soft);border-radius:10px;color:var(--ink);line-height:1.55}
 .tipbody ul{margin:0;padding-left:18px}.tipbody li{margin:3px 0}
+.tipbody p{margin:0 0 8px}.tipbody p:last-child{margin:0}
+.grp{margin-top:12px}.grp:first-of-type{margin-top:8px}
+.grplab{display:block;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--mute);margin-bottom:6px}
 @media(prefers-reduced-motion:reduce){.tip summary::before{transition:none}}
 .box{display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);cursor:text}
 .box:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
@@ -157,18 +160,20 @@ mark{background:var(--hl);color:var(--hl-ink);border-radius:3px;padding:0 2px}
         </div>
         <div class="field">
           <span class="lab">Where to look</span>
-          <p class="sub">Sources searched for new papers.</p>
-          <div class="opts" id="src">
-            <label><input type="checkbox" value="OpenAlex" checked>OpenAlex</label>
-            <label><input type="checkbox" value="PubMed" checked>PubMed</label>
-            <label><input type="checkbox" value="arXiv" checked>arXiv</label>
-            <label><input type="checkbox" value="bioRxiv" checked>bioRxiv</label>
-            <label title="Preprints from SSRN, Research Square, PsyArXiv, SportRxiv and other servers, via Europe PMC"><input type="checkbox" value="europepmc" checked>Other preprints</label>
+          <div class="grp"><span class="grplab">Published papers</span>
+            <div class="opts" id="src">
+              <label><input type="checkbox" value="OpenAlex" checked>OpenAlex</label>
+              <label><input type="checkbox" value="PubMed" checked>PubMed</label>
+            </div>
           </div>
-          <div class="opts" style="margin-top:12px">
-            <label><input type="checkbox" id="oa">Open access only</label>
-            <label><input type="checkbox" id="pre" checked>Include preprints</label>
+          <div class="grp"><span class="grplab">Preprints</span>
+            <div class="opts"><label style="grid-column:1/-1"><input type="checkbox" id="pre" checked>Include preprints from all preprint servers</label></div>
+            <details class="tip"><summary>What’s a preprint?</summary><div class="tipbody">
+              <p>A preprint is a study its authors share publicly before it has been peer-reviewed or published in a journal. It often appears months earlier, so it’s a good way to spot new work first. The catch is that nobody has checked it yet, so its findings can change.</p>
+              <p>We label every preprint in your emails and results. Servers we check include arXiv, bioRxiv, medRxiv, SSRN, Research Square, PsyArXiv, Preprints.org, ChemRxiv and others.</p>
+            </div></details>
           </div>
+          <div class="opts" style="margin-top:14px"><label><input type="checkbox" id="oa">Open access only</label></div>
         </div>
         <div class="field">
           <span class="lab">How often</span>
@@ -213,7 +218,8 @@ mark{background:var(--hl);color:var(--hl-ink);border-radius:3px;padding:0 2px}
 <script>
 // When served by the backend this is "" (same origin). When the file is opened directly, talk to the local server.
 const API=location.protocol==="file:"?"http://127.0.0.1:5000":"";
-const SRC={openalex:"OpenAlex",pubmed:"PubMed",arxiv:"arXiv",biorxiv:"bioRxiv",europepmc:"Other preprints"};
+const SRC={openalex:"OpenAlex",pubmed:"PubMed",arxiv:"arXiv",biorxiv:"bioRxiv",europepmc:"Europe PMC"};
+const PRE=["arxiv","biorxiv","europepmc"];   // every preprint server; one switch controls them all
 const S={inc:[],exc:[],freq:"Weekly",view:"list"};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -228,7 +234,9 @@ const list=(a,w)=>a.length<2?a.join(""):a.slice(0,-1).join(", ")+" "+w+" "+a[a.l
 const q=t=>"“"+t.replace(/[“”"]/g,"").trim()+"”";
 let data=null,seq=0,timer=0;
 const raw=k=>{const v=[...S[k]],live=$(k).value.trim();if(live&&!v.some(x=>clean(x)===clean(live)))v.push(live);return v};
-const sources=()=>[...document.querySelectorAll("#src input:checked")].map(i=>i.value.toLowerCase());
+const pubs=()=>[...document.querySelectorAll("#src input:checked")].map(i=>i.value.toLowerCase());
+const sources=()=>[...pubs(),...PRE];            // the preprint switch (not these) decides whether preprints are wanted
+const none=()=>!pubs().length&&!$("pre").checked;
 
 function chips(kind){
   const box=$(kind+"box"),inp=$(kind);
@@ -268,7 +276,7 @@ document.querySelectorAll("#src input,#oa,#pre").forEach(i=>i.onchange=refresh);
 
 // Ask the server for matches, a moment after the person stops typing.
 function refresh(){clearTimeout(timer);timer=setTimeout(fetchPreview,250);if(!raw("inc").length){data=null;render()}else meta()}
-const filtered=()=>sources().length<FULL.length||$("oa").checked||!$("pre").checked;
+const filtered=()=>pubs().length<2||$("oa").checked||!$("pre").checked;
 async function post(body){
   const r=await fetch(API+"/api/preview",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   return{ok:r.ok,j:await r.json()};
@@ -277,7 +285,7 @@ async function fetchPreview(){
   const include=raw("inc"),my=++seq;
   if(!include.length){data=null;return render()}
   const src=sources();
-  if(!src.length){data={count:0,papers:[],nosrc:true};return render()}
+  if(none()){data={count:0,papers:[],nosrc:true};return render()}
   const exclude=raw("exc");
   try{
     // When any filter is on, also ask what the same topics return without filters, so we can say what they hide.
@@ -291,12 +299,9 @@ async function fetchPreview(){
   render();
 }
 
-// Filters that can never match anything (arXiv, bioRxiv and Other preprints only hold preprints).
+// Nothing selected can never match anything: no published source ticked and preprints switched off.
 function conflict(){
-  const s=sources();
-  if(!$("pre").checked&&s.length&&s.every(x=>x==="arxiv"||x==="biorxiv"||x==="europepmc"))
-    return "Preprints are switched off, but "+list(s.map(x=>SRC[x]),"and")+(s.length>1?" contain":" contains")+" only preprints, so this alert could never match anything.";
-  return null;
+  return none()?"Nothing is selected to search. Tick a published-papers source or include preprints.":null;
 }
 function renderNotice(){
   const n=$("notice"),c=conflict();let h="";
@@ -318,19 +323,20 @@ function renderNotice(){
 function renderSummary(){
   const el=$("sum"),inc=raw("inc");
   if(!inc.length){el.hidden=true;return}
-  const exc=raw("exc"),s=sources(),c=conflict(),f=S.freq;
+  const exc=raw("exc"),s=pubs(),c=conflict(),f=S.freq;
   let t=(f==="Instant"?"You’ll get an email as soon as a new paper about ":"You’ll get a "+f.toLowerCase()+" email with new papers about ")
     +list(inc.map(q),"or")+(f==="Instant"?" is published":"");
   if(exc.length)t+=", leaving out "+list(exc.map(q),"and");
-  t+=s.length===FULL.length?" from all sources":" from "+list(s.map(x=>SRC[x]),"and");
+  const names=[...s.map(x=>SRC[x]),...($("pre").checked?["preprint servers"]:[])];
+  t+=s.length===2&&$("pre").checked?" from all sources":" from "+list(names,"and");
   if($("oa").checked)t+=", open access only";
   if(!$("pre").checked)t+=", excluding preprints";
   t+=".";
   if(data&&!data.error&&!data.offline&&!data.nosrc&&typeof data.count==="number"&&!c)
     t+=" "+n(data)+(data.count===1?" paper":" papers")+" matched in the last 30 days.";
-  const bad=!s.length||c;
+  const bad=!!c;
   el.className="sum"+(bad?" bad":"");
-  el.textContent=!s.length?"⚠ No sources are selected, so this alert wouldn’t find anything.":c?"⚠ "+c:t;
+  el.textContent=c?"⚠ "+c:t;
   el.hidden=false;
 }
 function meta(){renderNotice();renderSummary()}
@@ -354,7 +360,7 @@ function render(){
   const au=p=>p.authors.slice(0,4).join(", ")+(p.authors.length>4?" et al.":"");
   if(S.view==="list"){
     out.innerHTML='<div class="list">'+list.map(p=>
-      '<article class="paper"><div class="meta"><span class="tag">'+esc(SRC[p.source]||p.source)+'</span>'+(p.is_oa?'<span class="tag oa">Open access</span>':'')+(p.is_preprint?'<span class="tag">Preprint</span>':'')+'<span>'+esc(p.venue)+' · '+esc(ago(p.published))+'</span></div>'+
+      '<article class="paper"><div class="meta"><span class="tag">'+esc(SRC[p.source]||p.source)+'</span>'+(p.is_oa?'<span class="tag oa">Open access</span>':'')+(p.is_preprint?'<span class="tag" title="Shared before peer review">Preprint (not peer reviewed)</span>':'')+'<span>'+esc(p.venue)+' · '+esc(ago(p.published))+'</span></div>'+
       '<h3><a href="'+esc(p.url)+'" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">'+hl(p.title,words)+'</a></h3><div class="au">'+esc(au(p))+'</div><p class="ab">'+hl(snip(p.abstract),words)+'</p></article>').join("")+'</div>';
   }else{
     const n=Math.min(list.length,4),first=raw("inc")[0];
@@ -370,7 +376,6 @@ $("go").onclick=async()=>{
   const m=$("mail").value.trim(),err=$("err"),inc=raw("inc"),btn=$("go");
   if(!inc.length){err.textContent="Add at least one topic to follow.";return}
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(m)){err.textContent="Enter a valid email address, like you@university.ac.uk.";return}
-  if(!sources().length){err.textContent="Tick at least one source.";return}
   const cf=conflict();if(cf){err.textContent=cf;return}
   err.textContent="";btn.disabled=true;btn.textContent="Sending…";
   try{
