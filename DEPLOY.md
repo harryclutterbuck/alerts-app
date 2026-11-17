@@ -81,7 +81,7 @@ Then load papers once so the live preview has something to show:
 python -m margin ingest
 ```
 
-(Each source looks back as far as suits it: PubMed 1 day, arXiv 2, OpenAlex 3. The worker repeats this every 6 hours.)
+(Each source looks back as far as suits it: PubMed 1 day, arXiv 2, OpenAlex 7. The worker repeats this every 6 hours.)
 
 ## 5. Before you tell anyone (legal, UK)
 
@@ -136,3 +136,16 @@ setting, `MARGIN_BRAND` (default `Margin`). To rename: change `MARGIN_BRAND`, se
 update `MARGIN_BASE_URL`, and restart. The `MARGIN_…` variable prefix and the Python package name are internal and never shown to
 subscribers, so they stay as they are. Do the rename before real subscribers join: links in emails already sent point at the old
 address.
+
+## Settings that are easy to get wrong
+
+The app checks these when it starts and prints exactly which one is wrong ("Not ready to start"):
+
+- `MARGIN_BASE_URL` – your public `https://` address. A capital `HTTPS://` and a trailing slash are tidied automatically.
+- `MARGIN_FROM` – `Name <address@yourdomain.com>` with the angle brackets, or just the plain address.
+- `SMTP_USER` – for Resend this is exactly `resend`; `SMTP_PASSWORD` is the API key.
+- `MARGIN_PROVIDERS` – who hosts your data and sends your email, shown on the privacy page. Until this and `MARGIN_OPERATOR` are
+  set, the privacy page shows a "Not ready to publish" warning. Check where each provider processes data before you publish it.
+
+If a confirmation email cannot be sent, the visitor sees "We couldn’t send your confirmation email just now" and the service log
+says why (for example a wrong SMTP login).

@@ -1,6 +1,6 @@
 # Margin backend
 
-Research alerts: people subscribe with keywords, and get an email when matching papers appear in OpenAlex, PubMed, arXiv or bioRxiv.
+Research alerts: people subscribe with keywords, and get an email when matching papers appear in OpenAlex, PubMed, Europe PMC (preprints), arXiv or bioRxiv.
 
 ## Try it in 30 seconds (no network, no setup beyond Python 3.11+)
 
@@ -49,7 +49,7 @@ See **DEPLOY.md** for the full walkthrough: OpenAlex key, email provider and DNS
     python -m margin demo            # sample data and a sample digest, fully offline
     python -m margin serve           # development server
     python -m margin worker          # background job: ingest, match, send, clean up, back up
-    python -m margin ingest [--days N] [--only openalex arxiv pubmed]   # default look-back: PubMed 1 day, arXiv 2, OpenAlex 3
+    python -m margin ingest [--days N] [--only openalex arxiv pubmed europepmc]   # default look-back: PubMed 1 day, arXiv 2, OpenAlex 7, Europe PMC 3
     python -m margin match / send [--force]
     python -m margin stats           # how people rate the papers they are sent
     python -m margin openalex-status # check your OpenAlex key and daily budget
