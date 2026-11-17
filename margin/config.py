@@ -29,7 +29,7 @@ class Config:
     smtp_password: str = ""
     contact_email: str = "you@example.com"         # sent to OpenAlex/NCBI so they can contact you
     ncbi_api_key: str = ""
-    openalex_max_pages: int = 300                  # per run; 1 credit each, 200 papers each
+    openalex_max_pages: int = 500                  # per run; 1 credit each, 200 papers each (7 days is ~330 pages)
     openalex_api_key: str = ""                     # free key from openalex.org/settings/api (required since Feb 2026)
     arxiv_categories: tuple = ("cs.AI", "cs.CL", "cs.LG", "cs.CV", "stat.ML", "q-bio.GN", "quant-ph")
     max_per_alert: int = 25
