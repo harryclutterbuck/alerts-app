@@ -2,7 +2,7 @@ import json
 import smtplib
 import time
 from email.message import EmailMessage
-from email.utils import formatdate, make_msgid
+from email.utils import formataddr, formatdate, make_msgid, parseaddr
 from pathlib import Path
 from urllib.parse import quote
 
@@ -12,7 +12,11 @@ from .config import Config
 def build_message(cfg: Config, to, subject, html, text, headers=None) -> EmailMessage:
     m = EmailMessage()
     m["From"], m["To"], m["Subject"] = cfg.from_addr, to, subject
-    m["Date"], m["Message-ID"] = formatdate(localtime=False), make_msgid()
+    domain = parseaddr(cfg.from_addr)[1].rpartition("@")[2] or None     # a Message-ID on our own domain looks less like spam than the server's name
+    m["Date"], m["Message-ID"] = formatdate(localtime=False), make_msgid(domain=domain)
+    reply = parseaddr(cfg.contact_email or "")[1]
+    if "@" in reply and "example.com" not in reply:                     # replies go to a real mailbox; people replying is a good sign to mail providers
+        m["Reply-To"] = formataddr((cfg.brand, reply))
     for k, v in (headers or {}).items():
         m[k] = v
     m.set_content(text)

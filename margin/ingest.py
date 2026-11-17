@@ -4,7 +4,7 @@ from datetime import timedelta
 
 from . import db
 from .config import Config
-from .sources import arxiv, openalex, pubmed
+from .sources import arxiv, europepmc, openalex, pubmed
 
 log = logging.getLogger("margin.ingest")
 
@@ -13,7 +13,8 @@ log = logging.getLogger("margin.ingest")
 #  - PubMed filters by entry date (no lag) but returns at most 10,000 records, and a day is ~6,000, so keep it short.
 #  - arXiv is paged newest-first and capped at 3,000, so a short window is all it can use anyway.
 #  - OpenAlex has ~9,000+ new works a day (measured), so 3 days is ~130 requests; a longer window would exceed the page cap.
-LOOKBACK_DAYS = {"pubmed": 1, "arxiv": 2, "openalex": 3}
+#  - Europe PMC (preprints only) adds about 1,000 a day, so 3 days is a handful of requests.
+LOOKBACK_DAYS = {"pubmed": 1, "arxiv": 2, "openalex": 3, "europepmc": 3}
 
 
 def fetchers(cfg: Config, days: int | None = None):
@@ -24,6 +25,7 @@ def fetchers(cfg: Config, days: int | None = None):
         "openalex": lambda: openalex.fetch(since("openalex"), cfg.contact_email, cfg.openalex_api_key, cfg.openalex_max_pages),
         "arxiv": lambda: arxiv.fetch(since("arxiv"), cfg.arxiv_categories),
         "pubmed": lambda: pubmed.fetch(since("pubmed"), cfg.contact_email, cfg.ncbi_api_key),
+        "europepmc": lambda: europepmc.fetch(since("europepmc")),
     }
 
 

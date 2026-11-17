@@ -160,7 +160,7 @@ def render(cfg: Config, sub, groups):
             f'<div style="border-top:1px solid {LINE};margin-top:26px;padding-top:14px;font:12px {SANS};color:{MUTE}">'
             f'<a href="{manage}" style="color:{ACCENT}">Edit or pause your alerts</a> &nbsp;·&nbsp; '
             f'<a href="{unsub}" style="color:{MUTE}">Unsubscribe</a><br>'
-            f'You’re receiving this because you confirmed an alert at {H.escape(cfg.brand)}.{who}<br>Paper data from OpenAlex, PubMed and arXiv. Thank you to arXiv for use of its open access interoperability.</div></div></body></html>')
+            f'You’re receiving this because you confirmed an alert at {H.escape(cfg.brand)}.{who}<br>Paper data from OpenAlex, PubMed, Europe PMC and arXiv. Thank you to arXiv for use of its open access interoperability.</div></div></body></html>')
     text = "\n".join(t) + f"\nEdit or pause: {manage}\nUnsubscribe: {unsub}\n" + (f"\n{cfg.brand} is run by {cfg.operator} ({cfg.contact_email}).\n" if cfg.operator else "")
     headers = {"List-Unsubscribe": f"<{unsub}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
     return subject, html, text, headers

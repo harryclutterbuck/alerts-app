@@ -16,6 +16,7 @@ import os
 import re
 import time
 from collections import defaultdict
+from email.utils import parseaddr
 from datetime import timedelta
 
 from urllib.parse import quote
@@ -28,7 +29,7 @@ from .digest import confirm_email, link, when_text
 from .mailer import make_mailer
 from .matcher import AlertSpec
 
-VALID_SOURCES = {"openalex", "pubmed", "arxiv", "biorxiv"}
+VALID_SOURCES = {"openalex", "pubmed", "arxiv", "biorxiv", "europepmc"}
 FREQS = {"instant", "daily", "weekly"}
 EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$")
 CONSENT = "double-opt-in:v1"
@@ -101,9 +102,9 @@ a{color:var(--accent)}
 """
 
 
-def render_simple_page(brand, title, body, tick=False):
+def render_simple_page(brand, title, body, tick=False, header=None):
     """A small page in the same look as the home page, for confirmation, unsubscribe and expired-link screens."""
-    b = H.escape(brand)
+    b, h = H.escape(brand), H.escape(header or brand)
     return Response(
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
@@ -111,7 +112,7 @@ def render_simple_page(brand, title, body, tick=False):
         '<link rel="preconnect" href="https://fonts.googleapis.com">'
         '<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Newsreader:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">'
         f'<style>{_PAGE_CSS}</style></head><body><div class="wrap">'
-        f'<a class="logo" href="/"><i></i>{b}</a>'
+        f'<a class="logo" href="/"><i></i>{h}</a>'
         f'<main class="card">{"<div class=tick aria-hidden=true>✓</div>" if tick else ""}<h1>{H.escape(title)}</h1>{body}</main>'
         '</div></body></html>', mimetype="text/html")
 
@@ -123,7 +124,7 @@ def create_app(cfg: Config | None = None, mailer=None) -> Flask:
     app = Flask(__name__)
 
     def page(title, body, tick=False):
-        return render_simple_page(cfg.brand, title, body, tick)
+        return render_simple_page(cfg.brand, title, body, tick, cfg.logo_text())
 
     if cfg.trust_proxy:
         # Behind the host's HTTPS proxy every request arrives from the proxy; believe its one forwarded address
@@ -180,7 +181,8 @@ def create_app(cfg: Config | None = None, mailer=None) -> Flask:
         """Serve a page from web/, filling in the product name so a rename is one setting (MARGIN_BRAND)."""
         text = open(os.path.join(web_dir, name), encoding="utf-8").read()
         js_safe = json.dumps(cfg.brand)[1:-1].replace("'", "\\'").replace("<", "\\u003c")
-        values = {"{{BRAND}}": H.escape(cfg.brand), "{{BRAND_JS}}": js_safe, **(extra or {})}
+        values = {"{{BRAND}}": H.escape(cfg.brand), "{{HEADER}}": H.escape(cfg.logo_text()), "{{BRAND_JS}}": js_safe,
+                  "{{FROM_ADDR}}": H.escape(parseaddr(cfg.from_addr)[1]), **(extra or {})}
         for k, v in values.items():
             text = text.replace(k, v)
         return Response(text, mimetype="text/html")

@@ -93,7 +93,24 @@ def connect(path: str) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=30000")
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
+
+def _migrate(conn):
+    """Alerts store the list of sources they watch. When 'Other preprints' (Europe PMC) was added, alerts that watched
+    every source at the time would otherwise never see it, so add it to those once. Alerts someone narrowed are left alone."""
+    if get_state(conn, "migrated_europepmc_source"):
+        return
+    old = {"openalex", "pubmed", "arxiv", "biorxiv"}
+    for r in conn.execute("SELECT id, sources FROM alerts").fetchall():
+        try:
+            if set(json.loads(r["sources"])) == old:
+                conn.execute("UPDATE alerts SET sources=? WHERE id=?", (json.dumps(sorted(old | {"europepmc"})), r["id"]))
+        except (ValueError, TypeError):
+            continue
+    set_state(conn, "migrated_europepmc_source", "1")
+    conn.commit()
 
 
 def get_state(conn, key, default=None):

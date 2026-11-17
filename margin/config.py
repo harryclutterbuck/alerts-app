@@ -14,6 +14,7 @@ def _url(v: str) -> str:
 @dataclass
 class Config:
     brand: str = "Margin"                          # product name shown to subscribers (pages, emails, privacy notice)
+    header: str = ""                               # optional: what the logo at the top of each page says, if shorter than the brand
     db_path: str = "margin.db"
     secret: str = "dev-secret-change-me"
     base_url: str = "http://localhost:5000"        # where this API is reachable (used in email links)
@@ -49,6 +50,7 @@ class Config:
         d = cls()
         return cls(
             brand=(e("MARGIN_BRAND", d.brand) or d.brand).strip(),
+            header=e("MARGIN_HEADER", d.header).strip(),
             db_path=e("MARGIN_DB", d.db_path),
             secret=e("MARGIN_SECRET", d.secret),
             base_url=_url(e("MARGIN_BASE_URL", d.base_url)),
@@ -79,6 +81,9 @@ class Config:
                 c.strip() for c in e("ARXIV_CATEGORIES", ",".join(d.arxiv_categories)).split(",") if c.strip()
             ),
         )
+
+    def logo_text(self) -> str:
+        return self.header or self.brand
 
     def problems(self) -> list[str]:
         """Things that must be fixed before real email is sent. Empty list = ready."""
