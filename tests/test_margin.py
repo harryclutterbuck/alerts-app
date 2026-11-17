@@ -605,11 +605,35 @@ class PipelineTests(unittest.TestCase):
     def test_search_tips_are_tucked_away_and_signup_hints_at_junk_folder(self):
         home = self.client.get("/").data.decode()
         self.assertIn('<details class="tip"><summary>Search tips</summary>', home)
+        self.assertIn("Published papers", home)                                   # sources are grouped, with one preprint switch
+        self.assertIn("Include preprints from all preprint servers", home)
+        self.assertIn("What’s a preprint?", home)
+        for server in ("arXiv", "bioRxiv", "medRxiv", "SSRN", "Research Square", "PsyArXiv"):
+            self.assertIn(server, home)
+        self.assertNotIn("Other preprints", home)
+        self.assertNotIn('value="arXiv"', home)                                   # no per-server preprint tick boxes any more
+        manage = self.client.get("/manage").data.decode()
+        self.assertIn("Include preprints from all preprint servers", manage)
+        self.assertIn("What’s a preprint?", manage)
         self.assertIn("AND is applied before OR", home)
         self.assertIn("Press Enter after each topic.", home)
         self.assertIn("junk or spam folder", home)
         from email.utils import parseaddr
         self.assertIn(parseaddr(self.cfg.from_addr)[1], home.split("junk or spam folder")[1][:200])
+
+    def test_preprints_are_labelled_in_the_digest_email(self):
+        pre = dict(PAPERS[1], source_id="L1", doi="10.1101/label.1", title="Labelled CRISPR preprint", is_preprint=True)
+        pub = dict(PAPERS[0], source_id="L2", doi="10.1000/label.2", title="Labelled CRISPR journal paper", is_preprint=False)
+        self.subscribe(include=["crispr"], exclude=[])
+        self.confirm_last()
+        for p in (pre, pub):
+            db.upsert_paper(self.conn, p)
+        self.conn.commit()
+        db.run_matching(self.conn)
+        digest.send_due(self.conn, self.cfg, self.mailer, now=next_monday_8am())
+        mail = self.mailer.sent[-1]
+        self.assertEqual(mail["html"].count("Preprint (not peer reviewed)"), 1)   # only the preprint carries the label
+        self.assertEqual(mail["text"].count("Preprint (not peer reviewed)"), 1)
 
     def test_emails_carry_reply_to_and_a_message_id_on_our_own_domain(self):
         from dataclasses import replace
