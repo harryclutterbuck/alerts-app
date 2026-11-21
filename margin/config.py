@@ -29,7 +29,7 @@ class Config:
     smtp_password: str = ""
     contact_email: str = "you@example.com"         # sent to OpenAlex/NCBI so they can contact you
     ncbi_api_key: str = ""
-    openalex_max_pages: int = 500                  # per run; 1 credit each, 200 papers each (7 days is ~330 pages)
+    openalex_max_pages: int = 500                  # per run; 1 credit each, 200 papers each (a full 7-day window is roughly 500 to 700 pages)
     openalex_api_key: str = ""                     # free key from openalex.org/settings/api (required since Feb 2026)
     arxiv_categories: tuple = ("cs.AI", "cs.CL", "cs.LG", "cs.CV", "stat.ML", "q-bio.GN", "quant-ph")
     max_per_alert: int = 25
@@ -43,6 +43,8 @@ class Config:
     ingest_days: int | None = None                 # set to force one lookback for every source; default is per source
     paper_retention_days: int = 35                 # the live preview looks back 30 days, so keeping more only costs disk
     max_alerts_per_subscriber: int = 20
+    ads_enabled: bool = False                      # master switch for sponsored messages; off unless MARGIN_ADS=on
+    ads_file: str = ""                             # JSON list of sponsors; blank = the ads.json that ships inside the app
 
     @classmethod
     def from_env(cls):
@@ -76,6 +78,8 @@ class Config:
             ingest_days=int(e("MARGIN_INGEST_DAYS")) if e("MARGIN_INGEST_DAYS") else None,
             paper_retention_days=int(e("MARGIN_PAPER_RETENTION_DAYS", d.paper_retention_days)),
             openalex_api_key=e("OPENALEX_API_KEY", d.openalex_api_key).strip(),
+            ads_enabled=e("MARGIN_ADS", "").strip().lower() in ("1", "true", "yes", "on"),
+            ads_file=e("MARGIN_ADS_FILE", d.ads_file).strip(),
             openalex_max_pages=int(e("OPENALEX_MAX_PAGES", d.openalex_max_pages)),
             arxiv_categories=tuple(
                 c.strip() for c in e("ARXIV_CATEGORIES", ",".join(d.arxiv_categories)).split(",") if c.strip()

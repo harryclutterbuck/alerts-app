@@ -4,7 +4,9 @@ import json
 import re
 from datetime import datetime, timedelta
 
-from . import db, rank, tokens
+from urllib.parse import quote
+
+from . import ads, db, rank, tokens
 from .config import Config
 
 YEAR = 365 * 24 * 3600
@@ -115,6 +117,34 @@ def collect(conn, sub, now, cfg: Config, force=False):
     return groups
 
 
+def _ad_block(cfg, ad, alert_name, why_url):
+    """The one sponsored box at the foot of a digest. Always labelled, always after the papers, no images, no tracking."""
+    lab = f"font:600 10.5px {SANS};letter-spacing:.08em;text-transform:uppercase;color:{MUTE}"
+    e = H.escape
+    return (
+        f'<div style="margin-top:30px;padding:16px;background:#fff;border:1px solid {LINE};border-radius:10px">'
+        f'<div style="{lab}">Sponsored</div>'
+        f'<table role="presentation" style="width:100%;margin-top:10px;border-collapse:collapse"><tr>'
+        f'<td style="width:64px;vertical-align:top"><div style="width:56px;height:56px;border-radius:10px;background:#E8EEFB;'
+        f'color:{ACCENT};font:700 20px {SANS};text-align:center;line-height:56px">{e(ad["initials"])}</div></td>'
+        f'<td style="vertical-align:top;padding-left:6px"><div style="font:600 15px/1.3 {SANS};color:{INK}">{e(ad["title"])}</div>'
+        f'<div style="font:13px/1.45 {SANS};color:{MUTE};margin-top:3px">{e(ad["body"])} <span style="white-space:nowrap">· {e(ad["sponsor"])}</span></div>'
+        f'<div style="margin-top:9px"><a href="{e(ad["url"])}" style="display:inline-block;padding:7px 14px;border:1px solid {ACCENT};'
+        f'border-radius:8px;color:{ACCENT};text-decoration:none;font:600 13px {SANS}">{e(ad["cta"])}</a></div></td></tr></table>'
+        f'<div style="font:11.5px/1.45 {SANS};color:{MUTE};margin-top:10px">Shown because of your alert “{e(alert_name)}”. '
+        f'Sponsors never receive your email address or what you read. '
+        f'<a href="{e(why_url)}" style="color:{MUTE}">Why am I seeing this? Hide ads</a></div></div>')
+
+
+def _wants_ads(cfg, sub):
+    if not cfg.ads_enabled:
+        return False
+    try:
+        return not sub["ads_off"]
+    except (KeyError, IndexError, TypeError):
+        return True
+
+
 def render(cfg: Config, sub, groups):
     total = sum(len(p) + x for _, p, x in groups)
     first = groups[0][0]
@@ -151,17 +181,28 @@ def render(cfg: Config, sub, groups):
                      f'{extra} more matched this period. Add “leave out” terms to narrow this alert.</div>')
             t += [f"+ {extra} more matched. Add 'leave out' terms to narrow this alert.", ""]
     body = "".join(h)
+    ad_html = ad_text = ""
+    if _wants_ads(cfg, sub):
+        hit = ads.pick(ads.load(cfg.ads_file), groups, sub["id"], db.now_dt().date())
+        if hit:
+            ad, alert_name = hit
+            why = f"{cfg.base_url}/ads/{link(cfg, 'ads', s=sub['id'])}"
+            ad_html = _ad_block(cfg, ad, alert_name, why)
+            ad_text = (f"\n-- Sponsored --\n{ad['title']}\n{ad['body']} ({ad['sponsor']})\n{ad['url']}\n"
+                       f"Shown because of your alert '{alert_name}'. Why am I seeing this, or hide ads: {why}\n")
+    feedback = f"mailto:{cfg.contact_email}?subject={quote('Feedback on ' + cfg.brand)}"
     who = f" {H.escape(cfg.brand)} is run by {H.escape(cfg.operator)}; reply or write to {H.escape(cfg.contact_email)}." if cfg.operator else ""
     html = (f'<!doctype html><html><body style="margin:0;background:#EDF1F7;padding:24px 12px">'
             f'<div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid {LINE};border-radius:14px;padding:26px 28px">'
             f'<div style="font:600 22px {SERIF};color:{INK}">{H.escape(cfg.brand)}</div>'
             f'<div style="font:italic 16px {SERIF};color:{INK};margin-top:14px">Here’s what’s new for your alerts.</div>'
-            f'{body}'
+            f'{body}{ad_html}'
             f'<div style="border-top:1px solid {LINE};margin-top:26px;padding-top:14px;font:12px {SANS};color:{MUTE}">'
             f'<a href="{manage}" style="color:{ACCENT}">Edit or pause your alerts</a> &nbsp;·&nbsp; '
+            f'<a href="{H.escape(feedback)}" style="color:{ACCENT}">Send feedback</a> &nbsp;·&nbsp; '
             f'<a href="{unsub}" style="color:{MUTE}">Unsubscribe</a><br>'
             f'You’re receiving this because you confirmed an alert at {H.escape(cfg.brand)}.{who}<br>Paper data from OpenAlex, PubMed, Europe PMC and arXiv. Thank you to arXiv for use of its open access interoperability.</div></div></body></html>')
-    text = "\n".join(t) + f"\nEdit or pause: {manage}\nUnsubscribe: {unsub}\n" + (f"\n{cfg.brand} is run by {cfg.operator} ({cfg.contact_email}).\n" if cfg.operator else "")
+    text = "\n".join(t) + ad_text + f"\nEdit or pause: {manage}\nFeedback: {cfg.contact_email}\nUnsubscribe: {unsub}\n" + (f"\n{cfg.brand} is run by {cfg.operator} ({cfg.contact_email}).\n" if cfg.operator else "")
     headers = {"List-Unsubscribe": f"<{unsub}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
     return subject, html, text, headers
 

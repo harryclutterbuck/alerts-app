@@ -117,6 +117,20 @@ def render_simple_page(brand, title, body, tick=False, header=None):
         '</div></body></html>', mimetype="text/html")
 
 
+_ADS_PRIVACY = (
+    "<h2>Sponsored messages</h2>"
+    "<p>Some emails carry one clearly labelled sponsored message after the papers. It is chosen because it relates to the topic of one "
+    "of your alerts. Sponsors do not receive your email address, your name or what you read, and sponsors cannot buy a place among the "
+    "papers or change which papers you get. We do not track whether you click. If you click, you visit the sponsor's own website, "
+    "which has its own privacy policy. The link in every sponsored message lets you hide them, and you can turn them back on from the same page.</p>")
+
+_ADS_EXPLAINER = (
+    "<p>{brand} is free to read. Some emails carry one clearly labelled sponsored message after the papers, to help cover the running costs.</p>"
+    "<p><b>How it's chosen.</b> Only by topic: a sponsor asks to appear alongside certain subjects, and we show it when one of your alerts is about that subject. "
+    "Sponsors never receive your email address, your name or what you read, they can't buy a place among the papers, and they can't change which papers you get.</p>"
+    "<p><b>If you click,</b> you go to the sponsor's own website, which has its own privacy policy. We don't track whether you click.</p>")
+
+
 def create_app(cfg: Config | None = None, mailer=None) -> Flask:
     cfg = cfg or Config.from_env()
     if cfg.mailer != "console" and cfg.problems():
@@ -182,7 +196,8 @@ def create_app(cfg: Config | None = None, mailer=None) -> Flask:
         text = open(os.path.join(web_dir, name), encoding="utf-8").read()
         js_safe = json.dumps(cfg.brand)[1:-1].replace("'", "\\'").replace("<", "\\u003c")
         values = {"{{BRAND}}": H.escape(cfg.brand), "{{HEADER}}": H.escape(cfg.logo_text()), "{{BRAND_JS}}": js_safe,
-                  "{{FROM_ADDR}}": H.escape(parseaddr(cfg.from_addr)[1]), **(extra or {})}
+                  "{{FROM_ADDR}}": H.escape(parseaddr(cfg.from_addr)[1]), "{{CONTACT}}": H.escape(cfg.contact_email),
+                  **(extra or {})}
         for k, v in values.items():
             text = text.replace(k, v)
         return Response(text, mimetype="text/html")
@@ -200,7 +215,7 @@ def create_app(cfg: Config | None = None, mailer=None) -> Flask:
         return render_page("privacy.html", {"{{PROVIDERS}}": H.escape(cfg.providers) if cfg.providers else
                                             "<b>[Name your hosting and email providers here, and where they process data.]</b>",
                                             "{{OPERATOR}}": H.escape(cfg.operator or "[your name or organisation]"),
-                     "{{CONTACT}}": H.escape(cfg.contact_email),
+                     "{{ADS}}": _ADS_PRIVACY if cfg.ads_enabled else "",
                      "{{RETENTION}}": str(cfg.paper_retention_days),
                      "{{UNFILLED}}": "" if (cfg.operator and cfg.providers) else
                          "<p style='background:#FFF6DD;border:1px solid #E8C766;padding:12px;border-radius:8px'><b>Not ready to publish:</b> "
@@ -314,6 +329,25 @@ def create_app(cfg: Config | None = None, mailer=None) -> Flask:
         return page("Unsubscribe?", "<p>This stops every alert on this email address. You can always sign up again later.</p>"
                                     "<form method=post><button class='btn'>Yes, unsubscribe me from all alerts</button></form>"
                                     "<p class='more'><a href='/'>No, keep my alerts</a></p>")
+
+    @app.route("/ads/<token>", methods=["GET", "POST"])
+    def ads_choice(token):
+        p = tokens.verify(token, cfg.secret, "ads")
+        row = conn().execute("SELECT ads_off FROM subscribers WHERE id=?", (p["s"],)).fetchone() if p else None
+        if not row:
+            return page("This link has expired", "<p>Use the link in a more recent email.</p>"
+                        "<a class='btn' href='/'>Back to the home page</a>"), 400
+        off = bool(row["ads_off"])
+        if request.method == "POST":
+            off = request.form.get("off") == "1"
+            conn().execute("UPDATE subscribers SET ads_off=? WHERE id=?", (int(off), p["s"]))
+            conn().commit()
+        explain = _ADS_EXPLAINER.format(brand=H.escape(cfg.brand))
+        if off:
+            return page("Sponsored messages are hidden", explain + "<form method=post><input type=hidden name=off value=0>"
+                        "<button class='btn'>Show them again</button></form>", tick=request.method == "POST")
+        return page("Why am I seeing this?", explain + "<form method=post><input type=hidden name=off value=1>"
+                    "<button class='btn'>Hide sponsored messages</button></form>")
 
     @app.get("/f/<token>")
     def feedback(token):

@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS subscribers(
   created_at TEXT NOT NULL,
   confirmed_at TEXT,            -- double opt-in consent timestamp
   consent_text TEXT,            -- which wording they agreed to
-  unsubscribed_at TEXT
+  unsubscribed_at TEXT,
+  ads_off INTEGER NOT NULL DEFAULT 0   -- 1 = this person chose to hide sponsored messages
 );
 CREATE TABLE IF NOT EXISTS alerts(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,8 +94,17 @@ def connect(path: str) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=30000")
     conn.executescript(SCHEMA)
+    _add_columns(conn)
     _migrate(conn)
     return conn
+
+
+def _add_columns(conn):
+    """Databases created before a column existed get it added once; new databases already have it."""
+    have = {r["name"] for r in conn.execute("PRAGMA table_info(subscribers)")}
+    if "ads_off" not in have:
+        conn.execute("ALTER TABLE subscribers ADD COLUMN ads_off INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
 
 
 def _migrate(conn):

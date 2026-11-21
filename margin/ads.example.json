@@ -1,0 +1,14 @@
+[
+  {
+    "id": "acme-msc-2027",
+    "sponsor": "AcmeSports",
+    "title": "Online MSc in Sport & Exercise Rehabilitation",
+    "body": "Part-time, 100% online. Applications for September 2027 are open.",
+    "cta": "See the course",
+    "url": "https://example.org/msc",
+    "keywords": ["tendinopathy OR rehabilitation OR \"sport medicine\""],
+    "start": "2027-01-01",
+    "end": "2027-03-31",
+    "active": true
+  }
+]
