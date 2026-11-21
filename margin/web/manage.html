@@ -219,7 +219,7 @@ function render(){
   h+='<div class="foot"><b style="color:var(--ink)">Email settings</b><p style="margin:6px 0 0">Stop every email from {{BRAND_JS}}, or erase your address and all alerts from our records.</p><div class="acts">'
     +(STATE.unsub?'':(CONFIRM==="unsub"?confirmRow("Unsubscribe from all emails?","unsub"):'<button class="b2" data-a="ask-unsub">Unsubscribe from everything</button>'))
     +(CONFIRM==="erase"?confirmRow("Erase all your data? This can’t be undone.","erase"):'<button class="b2 danger" data-a="ask-erase">Delete my data</button>')
-    +'</div><p style="margin-top:18px"><a class="link" href="/privacy">Privacy notice</a></p></div>';
+    +'</div><p style="margin-top:18px"><a class="link" href="/privacy">Privacy notice</a> &nbsp;·&nbsp; <a class="link" href="mailto:{{CONTACT}}?subject=Feedback">Send feedback</a></p></div>';
   $("app").innerHTML=h;
   bind();
   if(EDIT!=null)mountEditor(EDIT);
