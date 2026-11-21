@@ -61,3 +61,12 @@ See **DEPLOY.md** for the full walkthrough: OpenAlex key, email provider and DNS
 Every digest paper has "More like this" and "Not relevant" links. For each alert, Margin compares new matches with the
 papers you liked and rejected (word overlap in title and abstract, ignoring the alert's own keywords) and reorders the
 digest. Nothing is hidden; unwanted-looking papers just rank lower and fall into the "N more" line.
+
+## Sponsored messages (off by default)
+
+Nothing is shown unless you set `MARGIN_ADS=on`. Sponsors live in `margin/ads.json` (see `margin/ads.example.json`). Each one is matched
+by topic against the person's own alerts, shown once at the foot of a digest, always labelled "Sponsored", with a link that lets the
+reader see why and hide ads. Sponsors receive no data about readers, and clicks are not tracked. An empty file, a missing file or a
+broken file all mean no ads. Pause one ad by setting `"active": false`, or schedule it with `"start"` and `"end"` dates.
+Set `MARGIN_ADS_FILE` to use a different file. Before switching on: check your privacy page wording, UK advertising and marketing
+rules (ASA, ICO/PECR), and your email provider's terms.
