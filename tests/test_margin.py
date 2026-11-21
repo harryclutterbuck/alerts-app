@@ -735,5 +735,120 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("/api/stats", home)
         self.assertNotIn("papers indexed", home)
 
+    # ---- sponsored messages: off by default, relevant only, always labelled, easy to hide ----
+    def _ad_setup(self, ads, **cfg_changes):
+        import json
+        from dataclasses import replace
+        path = os.path.join(self.tmp.name, "ads.json")
+        with open(path, "w") as f:
+            json.dump(ads, f)
+        self.cfg = replace(self.cfg, ads_file=path, **cfg_changes)
+        self.mailer = ConsoleMailer(self.cfg)
+        self.client = create_app(self.cfg, self.mailer).test_client()
+        self.subscribe(include=["crispr"], exclude=[])
+        self.confirm_last()
+        db.upsert_paper(self.conn, dict(PAPERS[0], source_id="AD1", doi="10.1000/ad.1", title="An ad test CRISPR paper"))
+        self.conn.commit()
+        db.run_matching(self.conn)
+        digest.send_due(self.conn, self.cfg, self.mailer, now=next_monday_8am())
+        return self.mailer.sent[-1]
+
+    AD = {"id": "a1", "sponsor": "AcmeSports Ltd", "title": "Gene editing kits for teaching labs", "body": "Free trial for universities.",
+          "url": "https://example.org/kits?a=1&b=2", "keywords": ["crispr OR \"gene editing\""]}
+
+    def test_no_ads_unless_the_switch_is_on(self):
+        mail = self._ad_setup([self.AD])                              # ads_enabled defaults to False
+        self.assertNotIn("Sponsored", mail["html"])
+        self.assertNotIn("Sponsored", mail["text"])
+
+    def test_a_relevant_ad_is_labelled_escaped_and_comes_after_the_papers(self):
+        mail = self._ad_setup([self.AD], ads_enabled=True)
+        h = mail["html"]
+        self.assertIn("Sponsored", h)
+        self.assertIn("Gene editing kits for teaching labs", h)
+        self.assertIn("https://example.org/kits?a=1&amp;b=2", h)
+        self.assertLess(h.index("An ad test CRISPR paper"), h.index("Sponsored"))
+        self.assertLess(h.index("Sponsored"), h.index("Unsubscribe"))
+        self.assertEqual(h.count("Sponsored"), 1)
+        self.assertIn("-- Sponsored --", mail["text"])
+        self.assertIn("Send feedback", h)
+
+    def test_an_ad_on_another_topic_is_not_shown(self):
+        mail = self._ad_setup([dict(self.AD, keywords=["tendinopathy"])], ads_enabled=True)
+        self.assertNotIn("Sponsored", mail["html"])
+
+    def test_ads_outside_their_dates_paused_or_unsafe_are_ignored(self):
+        bad = [dict(self.AD, id="old", end="2020-01-01"), dict(self.AD, id="later", start="2999-01-01"),
+               dict(self.AD, id="off", active=False), dict(self.AD, id="http", url="http://example.org"),
+               dict(self.AD, id="nokw", keywords=[]), dict(self.AD, id="notitle", title=""), "junk", dict(self.AD, id="d", start="nope")]
+        mail = self._ad_setup(bad, ads_enabled=True)
+        self.assertNotIn("Sponsored", mail["html"])
+
+    def test_a_broken_ads_file_never_stops_a_digest(self):
+        from margin import ads as adsmod
+        path = os.path.join(self.tmp.name, "broken.json")
+        open(path, "w").write("{not json")
+        self.assertEqual(adsmod.load(path), [])
+        self.assertEqual(adsmod.load(os.path.join(self.tmp.name, "missing.json")), [])
+        self.assertEqual(adsmod.load(), [])                           # the file that ships is an empty list
+
+    def test_hiding_ads_is_one_click_and_reversible(self):
+        import re
+        mail = self._ad_setup([self.AD], ads_enabled=True)
+        url = re.search(r'href="(http[^"]*/ads/[^"]+)"', mail["html"]).group(1)
+        path = url.split(self.cfg.base_url)[1]
+        page = self.client.get(path).data.decode()
+        self.assertIn("Hide sponsored messages", page)
+        self.assertIn("never receive your email address", page)
+        self.assertEqual(self.conn.execute("SELECT ads_off FROM subscribers").fetchone()[0], 0)   # a GET changes nothing
+        self.assertIn("Show them again", self.client.post(path, data={"off": "1"}).data.decode())
+        self.assertEqual(self.conn.execute("SELECT ads_off FROM subscribers").fetchone()[0], 1)
+        # the next digest for this person carries no ad
+        db.upsert_paper(self.conn, dict(PAPERS[0], source_id="AD2", doi="10.1000/ad.2", title="Second ad test CRISPR paper"))
+        self.conn.commit()
+        db.run_matching(self.conn)
+        self.conn.execute("UPDATE alerts SET last_sent_at=NULL")
+        self.conn.commit()
+        digest.send_due(self.conn, self.cfg, self.mailer, now=next_monday_8am() + timedelta(days=7))
+        self.assertNotIn("Sponsored", self.mailer.sent[-1]["html"])
+        self.client.post(path, data={"off": "0"})
+        self.assertEqual(self.conn.execute("SELECT ads_off FROM subscribers").fetchone()[0], 0)
+        self.assertEqual(self.client.get("/ads/not-a-token").status_code, 400)
+
+    def test_the_privacy_page_mentions_sponsors_only_when_they_are_on(self):
+        from dataclasses import replace
+        off = self.client.get("/privacy").data.decode()
+        on = create_app(replace(self.cfg, ads_enabled=True), self.mailer).test_client().get("/privacy").data.decode()
+        self.assertNotIn("Sponsored messages", off)
+        self.assertIn("Sponsored messages", on)
+        self.assertNotIn("{{", on)
+
+    def test_older_databases_gain_the_ads_column(self):
+        import sqlite3
+        path = os.path.join(self.tmp.name, "old.db")
+        c = sqlite3.connect(path)
+        c.execute("CREATE TABLE subscribers(id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL, "
+                  "confirmed_at TEXT, consent_text TEXT, unsubscribed_at TEXT)")
+        c.execute("INSERT INTO subscribers(email, created_at) VALUES('x@y.co','2026-01-01')")
+        c.commit(); c.close()
+        conn = db.connect(path)
+        self.assertEqual(conn.execute("SELECT ads_off FROM subscribers").fetchone()[0], 0)
+        conn.close()
+
+    def test_feedback_links_are_on_the_site_and_in_the_email(self):
+        from dataclasses import replace
+        cfg = replace(self.cfg, contact_email="hello@inthemargin.uk")
+        c = create_app(cfg, self.mailer).test_client()
+        for path in ("/", "/manage"):
+            self.assertIn("mailto:hello@inthemargin.uk?subject=Feedback", c.get(path).data.decode())
+        self.subscribe(include=["crispr"], exclude=[])
+        self.confirm_last()
+        db.upsert_paper(self.conn, dict(PAPERS[0], source_id="FB1", doi="10.1000/fb.1", title="Feedback link CRISPR paper"))
+        self.conn.commit()
+        db.run_matching(self.conn)
+        digest.send_due(self.conn, cfg, self.mailer, now=next_monday_8am())
+        self.assertIn("mailto:hello@inthemargin.uk?subject=Feedback%20on%20Margin", self.mailer.sent[-1]["html"])
+
+
 if __name__ == "__main__":
     unittest.main()
